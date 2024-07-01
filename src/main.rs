@@ -17,28 +17,36 @@ use crate::components::renderer;
 struct DatabaseTable<'a> {
     conn: &'a Connection,
     table: String,
+    columns: Vec<String>,
 }
 
 impl<'a> DatabaseTable<'a> {
     // see if the voting is in progress or if it is a fresh table
-    // fn voting_in_progress(conn: &Connection) -> Result<bool, rusqlite::Error> {
-    //     // Prepare the SQL query dynamically using the table and column names
-    //     // let query = format!("SELECT COUNT(*) FROM {} WHERE {} != 0", table, column);
-    //     //
-    //     // // Execute the query and get the count of rows where the column value is not zero
-    //     // let count: i64 = conn.query_row(&query, params![], |row| row.get(0))?;
-    //     //
-    //     // // If count is 0, it means all values in the column are zero
-    //     // Ok(count == 0)
-    // }
-    //
-    // fn get_current_round(conn: &Connection) -> u16 {
-    //
-    // }
+    fn voting_in_progress(&self) -> Result<bool, rusqlite::Error> {
+        // prepare the SQL query dynamically using the table and column names
+        let query = format!("SELECT COUNT(*) FROM {} WHERE {} != 0", &self.table, &self.columns[3]);
+
+        // execute the query. No parameters, and we are getting the result of one row.
+        let count: i64 = self.conn.query_row(&query, params![], |row| row.get(0))?;
+
+        Ok(count != 0)
+    }
+
+    // get the current round. It is the minimum round from the 'round' column in our database.
+    // a round will move on once all entries in our database have moved up a round.
+    // initially from round 0 to round 1, for instance.
+    fn get_current_round(&self) -> Result<u16, rusqlite::Error> {
+        let query = format!("SELECT MIN({}) FROM {}", &self.columns[3], &self.table);
+
+        self.conn.query_row(&query, params![], |row| {
+            row.get::<usize, i64>(0)
+        }).map(|count| count as u16)
+    }
 
     // get initial count
     fn get_initial_count(&self) -> Result<u64, rusqlite::Error> {
-        let query = format!("SELECT COUNT(*) FROM {}", self.table);
+        let query = format!("SELECT COUNT(*) FROM {}", &self.table);
+
         self.conn.query_row(&query, params![], |row| {
             row.get::<usize, i64>(0)
         }).map(|count| count as u64)
@@ -55,9 +63,17 @@ fn main() -> Result<(), String> {
         }
     };
 
+    // particular to my database. Will try to generalize further in the future.
     let database_table = DatabaseTable {
         conn: &conn,
         table: String::from("images"),
+        columns: vec![
+            String::from("id"),
+            String::from("image_path"),
+            String::from("rating"),
+            String::from("round"),
+            String::from("out"),
+        ]
     };
 
     let initial_count = match database_table.get_initial_count() {
@@ -69,7 +85,8 @@ fn main() -> Result<(), String> {
     };
 
     println!("{}", initial_count);
-
+    println!("{}", database_table.voting_in_progress().unwrap().to_string());
+    println!("{}", database_table.get_current_round().unwrap().to_string());
 
     //
     // let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
@@ -103,12 +120,3 @@ fn main() -> Result<(), String> {
 
     Ok(())
 }
-
-
-
-
-
-// get number of
-// get round from database
-//
-// map database listings onto a vector?
