@@ -4,6 +4,7 @@ use rand::thread_rng;
 use rusqlite::{Connection, params, Result};
 use sdl2::event::Event;
 use sdl2::EventPump;
+use sdl2::rect::Rect;
 
 use crate::components::renderer;
 
@@ -134,7 +135,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
-    let aspect_ratio = window_width / window_height;
 
     let mut rng = thread_rng();
     let mut round_number = images_table.get_latest_round_number()?;
@@ -144,10 +144,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while participants.len() > 1 {
         // increment the round each loop and insert the round into a table for persistent storage
         round_number += 1;
-        images_table.conn.execute("INSERT INTO rounds (round_number) VALUES (?1)",
-                                    params![round_number])?;
-
-        let round_id = images_table.conn.last_insert_rowid();
+        images_table.conn.execute(
+            "INSERT INTO rounds (round_number) VALUES (?1)",
+            params![round_number]
+        )?;
 
         // shuffle our vector
         participants.shuffle(&mut rng);
@@ -167,30 +167,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let texture_2 = renderer::load_texture(&texture_creator, &image_2)?;
 
                 // render our textures (only once per round)
-                renderer::render_textures(&mut canvas, &texture_1, &texture_2, window_width, window_height)?;
+                let (texture1_rect, texture2_rect) = renderer::render_textures(&mut canvas, &texture_1, &texture_2, window_width, window_height)?;
 
                 let mut event_pump = sdl2::init()?.event_pump()?;
 
-                let winner = compete_loop(
+                let (winner, stupid) = compete_loop(
                     &images_table,
                     &mut event_pump,
                     pair[0],
                     pair[1],
-                    window_width,
-                    window_height,
+                    &texture1_rect,
+                    &texture2_rect,
                 )?;
+
+                if stupid == 1 {
+                    renderer::animate_zoom_out(&mut canvas, &texture_1, texture1_rect, 0.98)?;
+                } else {
+                    renderer::animate_zoom_out(&mut canvas, &texture_2, texture2_rect, 0.98)?;
+                }
 
                 next_round.push(winner);
 
                 images_table.conn.execute(
                     "INSERT INTO matches (round_id, participant1_id, participant2_id, winner_id)
                          VALUES (?1, ?2, ?3, ?4)",
-                    params![round_id, pair[0], pair[1], winner])?;
+                    params![round_number, pair[0], pair[1], winner])?;
+
+                let match_id = images_table.conn.last_insert_rowid();
+
+                println!("The winner of round {}, match {} is: {}",
+                         round_number,
+                         match_id,
+                         if winner == pair[0] {image_1} else {image_2});
             } else {
                 next_round.push(pair[0]);
             }
         }
-
         // update participants to the winners of the round
         participants = next_round;
     }
@@ -206,9 +218,9 @@ fn compete_loop(
     event_pump: &mut EventPump,
     participant1: u64,
     participant2: u64,
-    window_width: u32,
-    window_height: u32,
-) -> Result<u64, rusqlite::Error> {
+    texture1_rect: &Rect,
+    texture2_rect: &Rect,
+) -> Result<(u64, u8), rusqlite::Error> {
     loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -217,31 +229,14 @@ fn compete_loop(
                     std::process::exit(0); // exit application
                 },
                 Event::MouseButtonDown { x, y, .. } => {
-                    // areas in which the user clicks
-                    // supposed to cover the images
-                    let texture1_rect = (
-                        window_width / 4 - 500,
-                        window_height / 2 - 500,
-                        1000,
-                        1000
-                    );
-                    let texture2_rect = (
-                        3 * window_width / 4 - 500,
-                        window_height / 2 - 500,
-                        1000,
-                        1000
-                    );
-
-                    if x >= texture1_rect.0 as i32 && x <= (texture1_rect.0 + texture1_rect.2) as i32 &&
-                        y >= texture1_rect.1 as i32 && y <= (texture1_rect.1 + texture1_rect.3) as i32 {
+                    if texture1_rect.contains_point((x,y)) {
                         println!("Image 1 clicked");
                         database_table.increment_rating(participant1)?;
-                        return Ok(participant1);
-                    } else if x >= texture2_rect.0 as i32 && x <= (texture2_rect.0 + texture2_rect.2) as i32 &&
-                        y >= texture2_rect.1 as i32 && y <= (texture2_rect.1 + texture2_rect.3) as i32 {
+                        return Ok((participant1, 1));
+                    } else if texture2_rect.contains_point((x,y)) {
                         println!("Image 2 clicked");
                         database_table.increment_rating(participant2)?;
-                        return Ok(participant2);
+                        return Ok((participant2, 2));
                     }
                 },
                 _ => {}
