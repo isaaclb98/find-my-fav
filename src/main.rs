@@ -1,11 +1,13 @@
-mod components;
-
-use sdl2::event::Event;
-use rusqlite::{params, Connection, Result};
-use crate::components::renderer;
 use rand::*;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+use rusqlite::{Connection, params, Result};
+use sdl2::event::Event;
+use sdl2::EventPump;
+
+use crate::components::renderer;
+
+mod components;
 
 struct DatabaseTable<'a> {
     conn: &'a Connection,
@@ -83,25 +85,21 @@ impl<'a> DatabaseTable<'a> {
         Ok(())
     }
 
+    // input: &DatabaseTable, &u64
+    // output: Result<&str>
+    fn get_image_path_from_database(&self, id: &u64) -> Result<String> {
+        let query = format!("SELECT image_path FROM images WHERE id = ?1");
+        self.conn.query_row(&query, params![id], |row| {
+            row.get(0)
+        })
+    }
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Open a connection to the SQLite database
-    let conn = match Connection::open("C:/Users/Isaac/RustroverProjects/database.db") {
-        Ok(conn) => conn,
-        Err(e) => {
-            eprintln!("Error opening database: {}", e);
-            return Err(e);
-        }
-    };
+    let conn = Connection::open("C:/Users/Isaac/RustroverProjects/database.db")?;
 
-    match DatabaseTable::initialize(&conn) {
-        Ok(()) => (),
-        Err(e) => {
-            eprintln!("Error initializing database: {}", e);
-            return Err(e);
-        }
-    }
+    DatabaseTable::initialize(&conn)?;
 
     // particular to my database. Will try to generalize further in the future.
     let images_table = DatabaseTable {
@@ -135,92 +133,21 @@ fn main() -> Result<()> {
         ]
     };
 
-    let latest_round = match rounds_table.get_latest_round_number() {
-        Ok(count) => count,
-        Err(e) => {
-            eprintln!("Failed to get the count: {}", e);
-            return Err(e);
-        }
-    };
+    let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
+    let aspect_ratio = window_width / window_height;
 
-    run_tournament(&images_table)?;
-    // println!("{}", latest_round);
-    // println!("{}", images_table.voting_in_progress().unwrap().to_string());
-    // println!("{}", images_table.get_current_round().unwrap().to_string());
-
-    // pseudocode
-    // check if not in progress (fresh table)
-    // get count
-    // if count is odd, we select the median value and send it to the next round automatically
-    // for the list of all entries where out = false
-    //      loop, pitting n and count-n-1 against each other
-    //          specifically, check the round of each. Make sure both are same as current round
-    //          *should we store this (current round) persistently in the database?
-    //          set the 'out' bool to yes for the loser of each vote
-    //      stop after we encounter the id where id = (id of median value) - 1
-    //
-
-
-
-
-
-
-    //
-    // let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
-    //
-    // let texture1 = renderer::load_texture(&texture_creator, "C:/Users/Isaac/Pictures/image1")?;
-    // let texture2 = renderer::load_texture(&texture_creator, "C:/Users/Isaac/Pictures/image2")?;
-    //
-    // let mut event_pump = sdl2::init()?.event_pump()?;
-    //
-    // 'running: loop {
-    //     for event in event_pump.poll_iter() {
-    //         match event {
-    //             Event::Quit { .. } => break 'running,
-    //             Event::MouseButtonDown { x, y, .. } => {
-    //                 let texture1_rect = (window_width / 4 - 50, window_height / 2 - 50, 100, 100);
-    //                 let texture2_rect = (3 * window_width / 4 - 50, window_height / 2 - 50, 100, 100);
-    //
-    //                 if x >= texture1_rect.0 as i32 && x <= (texture1_rect.0 + texture1_rect.2) as i32 &&
-    //                     y >= texture1_rect.1 as i32 && y <= (texture1_rect.1 + texture1_rect.3) as i32 {
-    //                     println!("Image 1 clicked");
-    //                 } else if x >= texture2_rect.0 as i32 && x <= (texture2_rect.0 + texture2_rect.2) as i32 &&
-    //                     y >= texture2_rect.1 as i32 && y <= (texture2_rect.1 + texture2_rect.3) as i32 {
-    //                     println!("Image 2 clicked");
-    //                 }
-    //             },
-    //             _ => {}
-    //         }
-    //     }
-    //     renderer::render_textures(&mut canvas, &texture1, &texture2, window_width, window_height)?;
-    // }
-
-    Ok(())
-}
-
-fn compete(database_table: &DatabaseTable, participant1: u64, participant2: u64) -> Result<u64> {
-    if random() {
-        database_table.increment_rating(participant1)?;
-        Ok(participant1)
-    } else {
-        database_table.increment_rating(participant2)?;
-        Ok(participant2)
-    }
-}
-
-fn run_tournament(database_table: &DatabaseTable) -> Result<()> {
     let mut rng = thread_rng();
-    let mut round_number = database_table.get_latest_round_number()?;
-    let mut participants = database_table.get_remaining_participants(round_number)?;
+    let mut round_number = images_table.get_latest_round_number()?;
+    let mut participants = images_table.get_remaining_participants(round_number)?;
 
     // run until only one left (winner)
     while participants.len() > 1 {
         // increment the round each loop and insert the round into a table for persistent storage
         round_number += 1;
-        database_table.conn.execute("INSERT INTO rounds (round_number) VALUES (?1)",
+        images_table.conn.execute("INSERT INTO rounds (round_number) VALUES (?1)",
                                     params![round_number])?;
 
-        let round_id = database_table.conn.last_insert_rowid();
+        let round_id = images_table.conn.last_insert_rowid();
 
         // shuffle our vector
         participants.shuffle(&mut rng);
@@ -231,12 +158,34 @@ fn run_tournament(database_table: &DatabaseTable) -> Result<()> {
         // chunk the vector into pairs and have them all compete
         for pair in participants.chunks(2) {
             if pair.len() == 2 {
-                let winner = compete(database_table, pair[0], pair[1])?;
+                // get our image paths
+                let image_1 = images_table.get_image_path_from_database(&pair[0])?;
+                let image_2 = images_table.get_image_path_from_database(&pair[1])?;
+
+                // get our image textures
+                let texture_1 = renderer::load_texture(&texture_creator, &image_1)?;
+                let texture_2 = renderer::load_texture(&texture_creator, &image_2)?;
+
+                // render our textures (only once per round)
+                renderer::render_textures(&mut canvas, &texture_1, &texture_2, window_width, window_height)?;
+
+                let mut event_pump = sdl2::init()?.event_pump()?;
+
+                let winner = compete_loop(
+                    &images_table,
+                    &mut event_pump,
+                    pair[0],
+                    pair[1],
+                    window_width,
+                    window_height,
+                )?;
+
                 next_round.push(winner);
-                database_table.conn.execute(
+
+                images_table.conn.execute(
                     "INSERT INTO matches (round_id, participant1_id, participant2_id, winner_id)
                          VALUES (?1, ?2, ?3, ?4)",
-                 params![round_id, pair[0], pair[1], winner])?;
+                    params![round_id, pair[0], pair[1], winner])?;
             } else {
                 next_round.push(pair[0]);
             }
@@ -247,8 +196,56 @@ fn run_tournament(database_table: &DatabaseTable) -> Result<()> {
     }
 
     if let Some(&winner) = participants.get(0) {
-        println!("The winner is: {}", database_table.get_image_path(winner)?);
+        println!("The winner is: {}", images_table.get_image_path(winner)?);
     }
 
     Ok(())
+}
+fn compete_loop(
+    database_table: &DatabaseTable,
+    event_pump: &mut EventPump,
+    participant1: u64,
+    participant2: u64,
+    window_width: u32,
+    window_height: u32,
+) -> Result<u64, rusqlite::Error> {
+    loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => {
+                    println!("Quitting the application...");
+                    std::process::exit(0); // exit application
+                },
+                Event::MouseButtonDown { x, y, .. } => {
+                    // areas in which the user clicks
+                    // supposed to cover the images
+                    let texture1_rect = (
+                        window_width / 4 - 500,
+                        window_height / 2 - 500,
+                        1000,
+                        1000
+                    );
+                    let texture2_rect = (
+                        3 * window_width / 4 - 500,
+                        window_height / 2 - 500,
+                        1000,
+                        1000
+                    );
+
+                    if x >= texture1_rect.0 as i32 && x <= (texture1_rect.0 + texture1_rect.2) as i32 &&
+                        y >= texture1_rect.1 as i32 && y <= (texture1_rect.1 + texture1_rect.3) as i32 {
+                        println!("Image 1 clicked");
+                        database_table.increment_rating(participant1)?;
+                        return Ok(participant1);
+                    } else if x >= texture2_rect.0 as i32 && x <= (texture2_rect.0 + texture2_rect.2) as i32 &&
+                        y >= texture2_rect.1 as i32 && y <= (texture2_rect.1 + texture2_rect.3) as i32 {
+                        println!("Image 2 clicked");
+                        database_table.increment_rating(participant2)?;
+                        return Ok(participant2);
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
 }

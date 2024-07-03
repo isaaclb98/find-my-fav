@@ -16,6 +16,7 @@ pub fn initialize_sdl() -> Result<(WindowCanvas, TextureCreator<WindowContext>, 
 
     let window_width = display_mode.w as u32;
     let window_height = display_mode.h as u32;
+    let aspect_ratio = window_width / window_height as u32;
 
     let window = video_subsystem
         .window("Penis", window_width, window_height)
@@ -51,8 +52,16 @@ pub fn render_textures(
 
     // change texture rectangle sizes later
     // need actual dimensions of the image
-    let texture1_rect = Rect::new((window_width / 4 - 500) as i32, (window_height / 2 - 500) as i32, 1000, 1000);
-    let texture2_rect = Rect::new((3 * window_width / 4 - 500) as i32, (window_height / 2 - 500) as i32, 1000, 1000);
+    let texture1_rect = Rect::new(
+        (window_width / 4 - 500) as i32,
+        (window_height / 2 - 500) as i32,
+        1000,
+        1000);
+    let texture2_rect = Rect::new(
+        (3 * window_width / 4 - 500) as i32,
+        (window_height / 2 - 500) as i32,
+        1000,
+        1000);
 
     canvas.copy(texture1, None, Some(texture1_rect))?;
     canvas.copy(texture2, None, Some(texture2_rect))?;
