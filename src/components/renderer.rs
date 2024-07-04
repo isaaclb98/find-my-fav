@@ -8,6 +8,7 @@ use sdl2::video::{WindowContext, DisplayMode};
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
+use sdl2::sys::Font;
 
 pub fn initialize_sdl() -> Result<(WindowCanvas, TextureCreator<WindowContext>, u32, u32), String> {
     let sdl_context = sdl2::init()?;
@@ -105,6 +106,13 @@ pub fn render_winner(
     window_width: u32,
     window_height: u32,
 ) -> Result<Rect, String> {
+    let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
+
+    // load the font
+    let font_path = "./Roboto-Regular.ttf";
+    let font_size = 64;
+    let font = ttf_context.load_font(font_path, font_size)?;
+    
     canvas.set_draw_color(Color::RGB(255, 255, 255));
     canvas.clear();
 
@@ -125,21 +133,52 @@ pub fn render_winner(
         scaled_width = (scaled_height as f32 * aspect_ratio) as u32;
     }
 
-    // center the texture within the window
+    // size down
+    let scale_factor = 0.5;
+    scaled_height = (scaled_height as f32 * scale_factor) as u32;
+    scaled_width = (scaled_width as f32 * scale_factor) as u32;
+
+    // position the image
+    // here we choose to center it 66% down the screen
+    let x_position = ((window_width - scaled_width) / 2) as i32;
+    let y_position = (window_height as f32 * 0.66 - scaled_height as f32 / 2.0) as i32;
+
     let texture_rect = Rect::new(
-        ((window_width - scaled_width) / 2) as i32,
-        ((window_height - scaled_height) / 2) as i32,
+        x_position,
+        y_position,
         scaled_width,
         scaled_height,
     );
 
+    // create texture from the text
+    let text = "Winner!";
+    let text_surface = font
+        .render(text)
+        .blended(Color::RGB(0, 0, 0))
+        .map_err(|e| e.to_string())?;
+    let texture_creator = canvas.texture_creator();
+    let text_texture = texture_creator
+        .create_texture_from_surface(&text_surface)
+        .map_err(|e| e.to_string())?;
+
+    // position the text
+    let text_rect = Rect::new(
+        ((window_width - text_surface.width()) / 2) as i32,
+        y_position / 2, 
+        text_surface.width(),
+        text_surface.height(),
+    );
+
+    // render text
+    canvas.copy(&text_texture, None, Some(text_rect))?;
+  
     // render the texture
     canvas.copy(texture, None, Some(texture_rect))?;
+    
     canvas.present();
 
     Ok(texture_rect)
 }
-
 
 pub fn animate_zoom_out(
     canvas: &mut WindowCanvas,

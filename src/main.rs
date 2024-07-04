@@ -1,6 +1,3 @@
-mod components;
-
-use std::collections::HashMap;
 use rand::*;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
@@ -8,141 +5,19 @@ use rusqlite::{Connection, params, Result};
 use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::rect::Rect;
-use components::renderer;
+
 use components::file_system;
+use components::renderer;
 
-struct DatabaseTable<'a> {
-    conn: &'a Connection,
-    table: String,
-    columns: Vec<String>,
-}
+use crate::components::database::DatabaseTable;
 
-impl<'a> DatabaseTable<'a> {
-    fn initialize(conn: &Connection) -> Result<()> {
-        conn.execute("CREATE TABLE IF NOT EXISTS rounds (
-                      id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      round_number INTEGER NOT NULL,
-                      tournament_finished INTEGER DEFAULT 0
-                  )", params![])?;
-
-        conn.execute("CREATE TABLE IF NOT EXISTS matches (
-                      id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      round_id INTEGER NOT NULL,
-                      participant1_id INTEGER,
-                      participant2_id INTEGER,
-                      winner_id INTEGER,
-                      FOREIGN KEY (round_id) REFERENCES rounds(id),
-                      FOREIGN KEY (participant1_id) REFERENCES participants(id),
-                      FOREIGN KEY (participant2_id) REFERENCES participants(id),
-                      FOREIGN KEY (winner_id) REFERENCES participants(id)
-                  )", params![])?;
-
-        Ok(())
-    }
-
-    // rounds
-    fn get_latest_round_number(&self) -> Result<u64> {
-        let query = format!("SELECT IFNULL(MAX(round_number), 0) FROM rounds");
-        self.conn.query_row(&query, params![], |row| {
-            row.get::<usize, i64>(0)
-        }).map(|count| count as u64)
-    }
-
-    // images and matches
-    fn get_remaining_participants(&self, round_number: u64) -> Result<Vec<u64>> {
-       let mut sql_statement = self.conn.prepare(
-                            "SELECT id FROM images
-                                 WHERE id NOT IN (SELECT participant1_id FROM matches WHERE round_id = ?1
-                                     UNION ALL
-                                     SELECT participant2_id FROM matches WHERE round_id = ?1)")?;
-       let participants = sql_statement.query_map(params![round_number], |row| {
-           row.get::<usize, i64>(0)
-       })?.map(|result| result.unwrap() as u64)
-          .collect();
-
-       Ok(participants)
-    }
-
-    fn get_image_path(&self, image_id: u64) -> Result<String> {
-        self.conn.query_row("SELECT image_path FROM images WHERE id = ?1", params![image_id], |row| row.get(0))
-    }
-
-    fn get_image_path_with_max_rating(&self) -> Result<String> {
-        self.conn.query_row(
-            "SELECT image_path FROM images ORDER BY rating DESC LIMIT 1",
-            params![],
-            |row| row.get(0)
-        )
-    }
-
-    fn get_rating(&self, image_id: u64) -> Result<u32> {
-        self.conn.query_row(
-            "SELECT rating FROM images WHERE id = ?1",
-            params![image_id],
-            |row| row.get(0),
-        )
-    }
-
-    fn increment_rating(&self, image_id: u64) -> Result<()> {
-        let mut rating = self.get_rating(image_id)?;
-
-        rating += 1;
-
-        self.conn.execute(
-            "UPDATE images SET rating = ?1 WHERE id = ?2",
-            params![rating, image_id],
-        )?;
-
-        Ok(())
-    }
-
-    fn get_image_path_from_database(&self, id: &u64) -> Result<String> {
-        let query = format!("SELECT image_path FROM images WHERE id = ?1");
-        self.conn.query_row(&query, params![id], |row| {
-            row.get(0)
-        })
-    }
-
-    fn get_tournament_finished(&self, round_number: u64) -> Result<bool> {
-        self.conn.query_row(
-            "SELECT tournament_finished FROM rounds WHERE round_number = ?1",
-            params![round_number],
-            |row| {
-                let finished: i32 = row.get(0)?;
-                Ok(finished != 0)
-            }
-        )
-    }
-
-    fn calculate_percentiles(&self) -> Result<HashMap<String, f64>> {
-        // retrieve all images
-        let mut stmt = self.conn.prepare("SELECT image_path FROM images ORDER BY rating DESC")?;
-        let images = stmt.query_map(params![], |row| {
-            let image_path: String = row.get(0)?;
-            Ok(image_path)
-        })?.filter_map(Result::ok).collect::<Vec<_>>();
-
-        // calculate the total number of images
-        let total_images = images.len() as f64;
-
-        // (image_path, percentile) map
-        let mut percentiles = HashMap::new();
-
-        for (index, image_path) in images.iter().enumerate() {
-            let percentile = (1.0 - (index as f64 / total_images)) * 100.0;
-            percentiles.insert(image_path.clone(), percentile);
-        }
-
-        for (imagepath, percentile) in &percentiles {
-            println!("{}: {}", percentile, imagepath);
-        }
-        Ok(percentiles)
-    }
-
-}
+mod components;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    const NEW_DIRECTORY: &str = "C:/Users/Isaac/Pictures/favourites";
+    // const NEW_DIRECTORY: &str = "C:/Users/Isaac/Pictures/favourites";
+    let image_directory = file_system::create_image_directory().to_string_lossy().to_string();
+    println!("{}", image_directory);
+    
     // Open a connection to the SQLite database
     let conn = Connection::open("C:/Users/Isaac/RustroverProjects/database.db")?;
 
@@ -240,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         let percentile_map = database.calculate_percentiles()?;
-        file_system::copy_images_to_directory(percentile_map, NEW_DIRECTORY)?;
+        file_system::copy_images_to_directory(percentile_map, &image_directory)?;
 
         let winner_path = database.get_image_path_with_max_rating()?;
         let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;

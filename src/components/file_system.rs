@@ -1,7 +1,16 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::io::Result;
+
+fn get_user_home_directory() -> PathBuf {
+    dirs::home_dir().expect("Could not find the home directory")
+}
+
+pub fn create_image_directory() -> PathBuf {
+    let home = get_user_home_directory();
+    home.join("Pictures").join("favourites")
+}
 
 pub fn copy_images_to_directory(percentile_map: HashMap<String, f64>, new_directory: &str) -> Result<()> {
     if !Path::new(new_directory).exists() {
