@@ -1,3 +1,6 @@
+mod components;
+
+use std::collections::HashMap;
 use rand::*;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
@@ -5,10 +8,8 @@ use rusqlite::{Connection, params, Result};
 use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::rect::Rect;
-
-use crate::components::renderer;
-
-mod components;
+use components::renderer;
+use components::file_system;
 
 struct DatabaseTable<'a> {
     conn: &'a Connection,
@@ -66,6 +67,14 @@ impl<'a> DatabaseTable<'a> {
         self.conn.query_row("SELECT image_path FROM images WHERE id = ?1", params![image_id], |row| row.get(0))
     }
 
+    fn get_image_path_with_max_rating(&self) -> Result<String> {
+        self.conn.query_row(
+            "SELECT image_path FROM images ORDER BY rating DESC LIMIT 1",
+            params![],
+            |row| row.get(0)
+        )
+    }
+
     fn get_rating(&self, image_id: u64) -> Result<u32> {
         self.conn.query_row(
             "SELECT rating FROM images WHERE id = ?1",
@@ -104,9 +113,36 @@ impl<'a> DatabaseTable<'a> {
             }
         )
     }
+
+    fn calculate_percentiles(&self) -> Result<HashMap<String, f64>> {
+        // retrieve all images
+        let mut stmt = self.conn.prepare("SELECT image_path FROM images ORDER BY rating DESC")?;
+        let images = stmt.query_map(params![], |row| {
+            let image_path: String = row.get(0)?;
+            Ok(image_path)
+        })?.filter_map(Result::ok).collect::<Vec<_>>();
+
+        // calculate the total number of images
+        let total_images = images.len() as f64;
+
+        // (image_path, percentile) map
+        let mut percentiles = HashMap::new();
+
+        for (index, image_path) in images.iter().enumerate() {
+            let percentile = (1.0 - (index as f64 / total_images)) * 100.0;
+            percentiles.insert(image_path.clone(), percentile);
+        }
+
+        for (imagepath, percentile) in &percentiles {
+            println!("{}: {}", percentile, imagepath);
+        }
+        Ok(percentiles)
+    }
+
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    const NEW_DIRECTORY: &str = "C:/Users/Isaac/Pictures/favourites";
     // Open a connection to the SQLite database
     let conn = Connection::open("C:/Users/Isaac/RustroverProjects/database.db")?;
 
@@ -203,7 +239,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             params![1, round_number],
         )?;
 
-        let winner_path = database.get_image_path(winner)?;
+        let percentile_map = database.calculate_percentiles()?;
+        file_system::copy_images_to_directory(percentile_map, NEW_DIRECTORY)?;
+
+        let winner_path = database.get_image_path_with_max_rating()?;
         let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
         renderer::render_winner(&mut canvas, &winner_texture, window_width, window_height)?;
 
@@ -213,12 +252,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         loop {
             for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => {
-                        println!("Quitting the application...");
-                        std::process::exit(0); // exit application
-                    },
-                    _ => {}
+                if let Event::Quit { .. } = event {
+                    println!("Quitting the application...");
+                    std::process::exit(0); // exit application
                 }
             }
         }    
