@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // const NEW_DIRECTORY: &str = "C:/Users/Isaac/Pictures/favourites";
     let image_directory = file_system::create_image_directory().to_string_lossy().to_string();
     println!("{}", image_directory);
-    
+
     // Open a connection to the SQLite database
     let conn = Connection::open("C:/Users/Isaac/RustroverProjects/database.db")?;
 
@@ -114,12 +114,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             params![1, round_number],
         )?;
 
+        let winner_path = database.get_image_path_with_max_rating()?;
+        let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
+
+        renderer::render_winner(&mut canvas, &winner_texture, window_width, window_height, "Copying favourites...")?;
+
         let percentile_map = database.calculate_percentiles()?;
         file_system::copy_images_to_directory(percentile_map, &image_directory)?;
 
-        let winner_path = database.get_image_path_with_max_rating()?;
-        let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
-        renderer::render_winner(&mut canvas, &winner_texture, window_width, window_height)?;
+        let status_done = format!("Your favs have been copied to: {}", image_directory);
+        renderer::render_winner(&mut canvas,
+                                &winner_texture,
+                                window_width,
+                                window_height,
+                                &status_done)?;
 
         println!("The winner is: {}", winner_path);
 

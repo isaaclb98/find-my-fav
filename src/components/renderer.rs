@@ -1,14 +1,14 @@
 extern crate sdl2;
 
+use std::path::Path;
+use std::thread;
+use std::time::Duration;
+
 use sdl2::image::{self, InitFlag, LoadTexture};
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{TextureCreator, WindowCanvas};
-use sdl2::video::{WindowContext, DisplayMode};
-use std::path::Path;
-use std::thread;
-use std::time::Duration;
-use sdl2::sys::Font;
+use sdl2::video::{DisplayMode, WindowContext};
 
 pub fn initialize_sdl() -> Result<(WindowCanvas, TextureCreator<WindowContext>, u32, u32), String> {
     let sdl_context = sdl2::init()?;
@@ -105,14 +105,15 @@ pub fn render_winner(
     texture: &sdl2::render::Texture,
     window_width: u32,
     window_height: u32,
+    status_message: &str,
 ) -> Result<Rect, String> {
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
 
     // load the font
     let font_path = "./Roboto-Regular.ttf";
-    let font_size = 64;
+    let font_size = 48;
     let font = ttf_context.load_font(font_path, font_size)?;
-    
+
     canvas.set_draw_color(Color::RGB(255, 255, 255));
     canvas.clear();
 
@@ -151,7 +152,7 @@ pub fn render_winner(
     );
 
     // create texture from the text
-    let text = "Winner!";
+    let text = status_message;
     let text_surface = font
         .render(text)
         .blended(Color::RGB(0, 0, 0))
@@ -164,17 +165,17 @@ pub fn render_winner(
     // position the text
     let text_rect = Rect::new(
         ((window_width - text_surface.width()) / 2) as i32,
-        y_position / 2, 
+        y_position / 2,
         text_surface.width(),
         text_surface.height(),
     );
 
     // render text
     canvas.copy(&text_texture, None, Some(text_rect))?;
-  
+
     // render the texture
     canvas.copy(texture, None, Some(texture_rect))?;
-    
+
     canvas.present();
 
     Ok(texture_rect)

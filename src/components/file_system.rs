@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::io::Result;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 fn get_user_home_directory() -> PathBuf {
     dirs::home_dir().expect("Could not find the home directory")
@@ -17,7 +18,7 @@ pub fn copy_images_to_directory(percentile_map: HashMap<String, f64>, new_direct
         fs::create_dir_all(new_directory)?;
     }
 
-    for (image_path, percentile) in percentile_map {
+    percentile_map.par_iter().try_for_each(|(image_path, &percentile)| {
         // if in the top 85th percentile
         if percentile >= 85f64 {
             // create a path
@@ -38,7 +39,6 @@ pub fn copy_images_to_directory(percentile_map: HashMap<String, f64>, new_direct
                 }
             }
         }
-    }
-
-    Ok(())
+        Ok(())
+    })
 }
