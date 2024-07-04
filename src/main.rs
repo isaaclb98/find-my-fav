@@ -20,7 +20,8 @@ impl<'a> DatabaseTable<'a> {
     fn initialize(conn: &Connection) -> Result<()> {
         conn.execute("CREATE TABLE IF NOT EXISTS rounds (
                       id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      round_number INTEGER NOT NULL
+                      round_number INTEGER NOT NULL,
+                      tournament_finished INTEGER DEFAULT 0
                   )", params![])?;
 
         conn.execute("CREATE TABLE IF NOT EXISTS matches (
@@ -86,13 +87,22 @@ impl<'a> DatabaseTable<'a> {
         Ok(())
     }
 
-    // input: &DatabaseTable, &u64
-    // output: Result<&str>
     fn get_image_path_from_database(&self, id: &u64) -> Result<String> {
         let query = format!("SELECT image_path FROM images WHERE id = ?1");
         self.conn.query_row(&query, params![id], |row| {
             row.get(0)
         })
+    }
+
+    fn get_tournament_finished(&self, round_number: u64) -> Result<bool> {
+        self.conn.query_row(
+            "SELECT tournament_finished FROM rounds WHERE round_number = ?1",
+            params![round_number],
+            |row| {
+                let finished: i32 = row.get(0)?;
+                Ok(finished != 0)
+            }
+        )
     }
 }
 
@@ -103,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     DatabaseTable::initialize(&conn)?;
 
     // particular to my database. Will try to generalize further in the future.
-    let images_table = DatabaseTable {
+    let database = DatabaseTable {
         conn: &conn,
         table: String::from("images"),
         columns: vec![
@@ -113,38 +123,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ]
     };
 
-    let rounds_table = DatabaseTable {
-        conn: &conn,
-        table: String::from("rounds"),
-        columns: vec![
-            String::from("id"),
-            String::from("round_number")
-        ]
-    };
-
-    let matches_table = DatabaseTable {
-        conn: &conn,
-        table: String::from("matches"),
-        columns: vec![
-            String::from("id"),
-            String::from("round_id"),
-            String::from("participant1_id"),
-            String::from("participant2_id"),
-            String::from("winner_id"),
-        ]
-    };
-
     let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
 
     let mut rng = thread_rng();
-    let mut round_number = images_table.get_latest_round_number()?;
-    let mut participants = images_table.get_remaining_participants(round_number)?;
+    let mut round_number = database.get_latest_round_number()?;
+    let mut participants = database.get_remaining_participants(round_number)?;
+    let tournament_finished = database.get_tournament_finished(round_number).unwrap_or(false);
 
     // run until only one left (winner)
-    while participants.len() > 1 {
+    while participants.len() > 1 && !tournament_finished {
         // increment the round each loop and insert the round into a table for persistent storage
         round_number += 1;
-        images_table.conn.execute(
+        database.conn.execute(
             "INSERT INTO rounds (round_number) VALUES (?1)",
             params![round_number]
         )?;
@@ -159,8 +149,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for pair in participants.chunks(2) {
             if pair.len() == 2 {
                 // get our image paths
-                let image_1 = images_table.get_image_path_from_database(&pair[0])?;
-                let image_2 = images_table.get_image_path_from_database(&pair[1])?;
+                let image_1 = database.get_image_path_from_database(&pair[0])?;
+                let image_2 = database.get_image_path_from_database(&pair[1])?;
 
                 // get our image textures
                 let texture_1 = renderer::load_texture(&texture_creator, &image_1)?;
@@ -172,7 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut event_pump = sdl2::init()?.event_pump()?;
 
                 let (winner, stupid) = compete_loop(
-                    &images_table,
+                    &database,
                     &mut event_pump,
                     pair[0],
                     pair[1],
@@ -181,19 +171,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )?;
 
                 if stupid == 1 {
-                    renderer::animate_zoom_out(&mut canvas, &texture_1, texture1_rect, 0.98)?;
+                    renderer::animate_zoom_out(&mut canvas, &texture_1, texture1_rect, 0.96)?;
                 } else {
-                    renderer::animate_zoom_out(&mut canvas, &texture_2, texture2_rect, 0.98)?;
+                    renderer::animate_zoom_out(&mut canvas, &texture_2, texture2_rect, 0.96)?;
                 }
 
                 next_round.push(winner);
 
-                images_table.conn.execute(
+                database.conn.execute(
                     "INSERT INTO matches (round_id, participant1_id, participant2_id, winner_id)
                          VALUES (?1, ?2, ?3, ?4)",
                     params![round_number, pair[0], pair[1], winner])?;
 
-                let match_id = images_table.conn.last_insert_rowid();
+                let match_id = database.conn.last_insert_rowid();
 
                 println!("The winner of round {}, match {} is: {}",
                          round_number,
@@ -208,7 +198,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(&winner) = participants.get(0) {
-        println!("The winner is: {}", images_table.get_image_path(winner)?);
+        database.conn.execute(
+            "UPDATE rounds SET tournament_finished = ?1 WHERE id = ?2",
+            params![1, round_number],
+        )?;
+
+        let winner_path = database.get_image_path(winner)?;
+        let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
+        renderer::render_winner(&mut canvas, &winner_texture, window_width, window_height)?;
+
+        println!("The winner is: {}", winner_path);
+
+        let mut event_pump = sdl2::init()?.event_pump()?;
+
+        loop {
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. } => {
+                        println!("Quitting the application...");
+                        std::process::exit(0); // exit application
+                    },
+                    _ => {}
+                }
+            }
+        }    
     }
 
     Ok(())

@@ -99,13 +99,55 @@ pub fn render_textures(
     Ok((texture1_rect, texture2_rect))
 }
 
+pub fn render_winner(
+    canvas: &mut WindowCanvas,
+    texture: &sdl2::render::Texture,
+    window_width: u32,
+    window_height: u32,
+) -> Result<Rect, String> {
+    canvas.set_draw_color(Color::RGB(255, 255, 255));
+    canvas.clear();
+
+    // get the dimensions of the texture
+    let query_texture = texture.query();
+    let (img_width, img_height) = (query_texture.width, query_texture.height);
+
+    // calculate the aspect ratio
+    let aspect_ratio = img_width as f32 / img_height as f32;
+
+    // calculate the new dimensions for the texture
+    let mut scaled_width = window_width;
+    let mut scaled_height = (scaled_width as f32 / aspect_ratio) as u32;
+
+    // fit the image within the window dimensions
+    if scaled_height > window_height {
+        scaled_height = window_height;
+        scaled_width = (scaled_height as f32 * aspect_ratio) as u32;
+    }
+
+    // center the texture within the window
+    let texture_rect = Rect::new(
+        ((window_width - scaled_width) / 2) as i32,
+        ((window_height - scaled_height) / 2) as i32,
+        scaled_width,
+        scaled_height,
+    );
+
+    // render the texture
+    canvas.copy(texture, None, Some(texture_rect))?;
+    canvas.present();
+
+    Ok(texture_rect)
+}
+
+
 pub fn animate_zoom_out(
     canvas: &mut WindowCanvas,
     texture: &sdl2::render::Texture,
     rect: Rect,
     zoom_factor: f32,
 ) -> Result<(), String> {
-    let steps = 10;
+    let steps: u8 = 10;
     for i in 0..steps {
         let scale = 1.0 - (i as f32 / steps as f32) * (1.0 - zoom_factor);
         let new_width = (rect.width() as f32 * scale) as u32;
@@ -120,7 +162,25 @@ pub fn animate_zoom_out(
         canvas.copy(texture, None, Some(new_rect))?;
         canvas.present();
 
-        thread::sleep(Duration::from_millis(5)); // Adjust the speed of the animation
+        thread::sleep(Duration::from_millis(2));
+    }
+
+    for i in (0..steps).rev() {
+        let scale = 1.0 - (i as f32 / steps as f32) * (1.0 - zoom_factor);
+        let new_width = (rect.width() as f32 * scale) as u32;
+        let new_height = (rect.height() as f32 * scale) as u32;
+        let new_x = rect.x() + ((rect.width() - new_width) / 2) as i32;
+        let new_y = rect.y() + ((rect.height() - new_height) / 2) as i32;
+
+        let new_rect = Rect::new(new_x, new_y, new_width, new_height);
+
+        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas.clear();
+        canvas.copy(texture, None, Some(new_rect))?;
+        canvas.present();
+
+        thread::sleep(Duration::from_millis(2));
     }
     Ok(())
 }
+
