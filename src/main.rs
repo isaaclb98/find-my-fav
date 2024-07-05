@@ -48,9 +48,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let image_1 = database::get_image_path_from_database(&conn, &pair[0])?;
                 let image_2 = database::get_image_path_from_database(&conn, &pair[1])?;
 
-                // get our image textures
-                let texture_1 = renderer::load_texture(&texture_creator, &image_1)?;
-                let texture_2 = renderer::load_texture(&texture_creator, &image_2)?;
+                // try to catch when an image fails to render
+                let texture_1 = match renderer::load_texture(&texture_creator, &image_1) {
+                    Ok(texture) => texture,
+                    Err(e) => {
+                        eprintln!("Error with one of your images: {}", e);
+                        database::set_loser_out(&conn, pair[0])?;
+                        continue;
+                    }
+                };
+                let texture_2 = match renderer::load_texture(&texture_creator, &image_2) {
+                    Ok(texture) => texture,
+                    Err(e) => {
+                        eprintln!("Error with one of your images: {}", e);
+                        database::set_loser_out(&conn, pair[1])?;
+                        continue;
+                    }
+                };
 
                 // render our textures (only once per round)
                 let (texture1_rect, texture2_rect) = renderer::render_textures(&mut canvas, &texture_1, &texture_2, window_width, window_height)?;
@@ -147,10 +161,8 @@ fn compete_loop(
                 },
                 Event::MouseButtonDown { x, y, .. } => {
                     if texture1_rect.contains_point((x, y)) {
-                        println!("Image 1 clicked");
                         return Ok(participant1);
                     } else if texture2_rect.contains_point((x, y)) {
-                        println!("Image 2 clicked");
                         return Ok(participant2);
                     }
                 },
