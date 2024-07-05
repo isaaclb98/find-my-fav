@@ -16,7 +16,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // create the directory to store the images after the tournament has been finished
     let image_directory = file_system::create_image_directory().to_string_lossy().to_string();
-    println!("{}", image_directory);
 
     // open a connection to the SQLite database
     // maybe in the future: create an sqlite database if the user does not already have one
@@ -30,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
     let mut round_number = database::get_latest_round_number(&conn)?;
-    let tournament_finished = database::get_tournament_finished(&conn, round_number).unwrap_or(false);
+    // let tournament_finished = database::get_tournament_finished(&conn, round_number).unwrap_or(false);
 
     let mut rng = thread_rng();
     
@@ -38,9 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut participants = database::get_remaining_participants(&conn, round_number)?;
     
     // run until only one left (winner)
-    // tournament finished is a persistent value that shows that the tournament has been completed already
-    // so it doesn't keep going
-    while participants.len() > 1 && !tournament_finished {
+    while participants.len() > 1 {
 
         // shuffle our vector
         participants.shuffle(&mut rng);
@@ -64,8 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let mut event_pump = sdl2::init()?.event_pump()?;
 
-                let (winner, stupid) = compete_loop(
-                    &conn,
+                let winner = compete_loop(
                     &mut event_pump,
                     pair[0],
                     pair[1],
@@ -73,12 +69,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &texture2_rect,
                 )?;
 
-                if stupid == 1 {
-                    renderer::animate_zoom_out_and_in(&mut canvas, &texture_1, texture1_rect, 0.96)?;
+                let (winner_texture, loser_id) = if winner == pair[0] {
+                    (&texture_1, pair[1])
                 } else {
-                    renderer::animate_zoom_out_and_in(&mut canvas, &texture_2, texture2_rect, 0.96)?;
-                }
+                    (&texture_2, pair[0])
+                };
 
+                renderer::animate_zoom_out_and_in(&mut canvas, winner_texture, if winner == pair[0] { texture1_rect } else { texture2_rect }, 0.96)?;
+                database::set_loser_out(&conn, loser_id)?;
+                database::increment_rating(&conn, winner)?;
+                
                 next_round.push(winner);
 
                 conn.execute(
@@ -142,13 +142,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn compete_loop(
-    conn: &Connection,
     event_pump: &mut EventPump,
     participant1: u64,
     participant2: u64,
     texture1_rect: &Rect,
     texture2_rect: &Rect,
-) -> Result<(u64, u8), rusqlite::Error> {
+) -> Result<u64, rusqlite::Error> {
     loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -157,14 +156,12 @@ fn compete_loop(
                     std::process::exit(0); // exit application
                 },
                 Event::MouseButtonDown { x, y, .. } => {
-                    if texture1_rect.contains_point((x,y)) {
+                    if texture1_rect.contains_point((x, y)) {
                         println!("Image 1 clicked");
-                        database::increment_rating(&conn, participant1)?;
-                        return Ok((participant1, 1));
-                    } else if texture2_rect.contains_point((x,y)) {
+                        return Ok(participant1);
+                    } else if texture2_rect.contains_point((x, y)) {
                         println!("Image 2 clicked");
-                        database::increment_rating(&conn, participant2)?;
-                        return Ok((participant2, 2));
+                        return Ok(participant2);
                     }
                 },
                 _ => {}
@@ -172,3 +169,4 @@ fn compete_loop(
         }
     }
 }
+

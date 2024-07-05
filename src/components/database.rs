@@ -2,6 +2,12 @@ use std::collections::HashMap;
 use rusqlite::{Connection, params, Result};
 
 pub(crate) fn initialize(conn: &Connection) -> Result<()> {
+    conn.execute("CREATE TABLE IF NOT EXISTS images (\
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,\
+                    image_path STRING,\
+                    rating INTEGER DEFAULT 0,\
+                    out INTEGER DEFAULT 0)", params![])?;
+    
     conn.execute("CREATE TABLE IF NOT EXISTS rounds (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   round_number INTEGER NOT NULL,
@@ -33,9 +39,14 @@ pub(crate) fn get_latest_round_number(conn: &Connection) -> Result<u64> {
 pub(crate) fn get_remaining_participants(conn: &Connection, round_number: u64) -> Result<Vec<u64>> {
     let mut sql_statement = conn.prepare(
         "SELECT id FROM images
-                             WHERE id NOT IN (SELECT participant1_id FROM matches WHERE round_id = ?1
-                                 UNION ALL
-                                 SELECT participant2_id FROM matches WHERE round_id = ?1)")?;
+         WHERE id NOT IN (
+             SELECT participant1_id FROM matches WHERE round_id = ?1
+             UNION ALL
+             SELECT participant2_id FROM matches WHERE round_id = ?1
+         ) 
+         AND out != 1"
+    )?;
+
     let participants = sql_statement.query_map(params![round_number], |row| {
         row.get::<usize, i64>(0)
     })?.map(|result| result.unwrap() as u64)
@@ -81,6 +92,15 @@ pub(crate) fn get_tournament_finished(conn: &Connection, round_number: u64) -> R
             Ok(finished != 0)
         }
     )
+}
+
+pub(crate) fn set_loser_out(conn: &Connection, image_id: u64) -> Result<()> {
+    conn.execute(
+        "UPDATE images SET out = ?1 WHERE id = ?2",
+        params![1, image_id],
+    )?;
+    
+    Ok(())
 }
 
 pub(crate) fn calculate_percentiles(conn: &Connection) -> Result<HashMap<String, f64>> {
