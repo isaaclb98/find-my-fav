@@ -24,7 +24,7 @@ pub(crate) fn initialize(conn: &Connection) -> Result<()> {
 }
 
 pub(crate) fn get_latest_round_number(conn: &Connection) -> Result<u64> {
-    let query = "SELECT IFNULL(MAX(round_number), 0) FROM rounds".to_string();
+    let query = "SELECT IFNULL(MAX(round_number), 1) FROM rounds".to_string();
     conn.query_row(&query, params![], |row| {
         row.get::<usize, i64>(0)
     }).map(|count| count as u64)

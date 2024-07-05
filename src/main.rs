@@ -29,31 +29,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     database::initialize(&conn)?;
     
     let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
-
-    let mut rng = thread_rng();
     let mut round_number = database::get_latest_round_number(&conn)?;
-    let mut participants = database::get_remaining_participants(&conn, round_number)?;
     let tournament_finished = database::get_tournament_finished(&conn, round_number).unwrap_or(false);
 
+    let mut rng = thread_rng();
+    
+    // get participants based on round number
+    let mut participants = database::get_remaining_participants(&conn, round_number)?;
+    
     // run until only one left (winner)
+    // tournament finished is a persistent value that shows that the tournament has been completed already
+    // so it doesn't keep going
     while participants.len() > 1 && !tournament_finished {
-        // increment the round each loop and insert the round into a table for persistent storage
-        round_number += 1;
-
-        // // Check if the current round number already exists in the database
-        // if !database.round_exists(round_number)? {
-        //     // Increment the round number and insert into the database if it doesn't exist
-        //     round_number += 1;
-        //     database.conn.execute(
-        //         "INSERT INTO rounds (round_number) VALUES (?1)",
-        //         rusqlite::params![round_number]
-        //     )?;
-        // }
-
-        conn.execute(
-            "INSERT INTO rounds (round_number) VALUES (?1)",
-            params![round_number]
-        )?;
 
         // shuffle our vector
         participants.shuffle(&mut rng);
@@ -112,46 +99,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // update participants to the winners of the round
         participants = next_round;
 
-        // database.update_tournament_state(round_number, participants.clone())?;
+        // increment the round each loop and insert the round into a table for persistent storage
+        round_number += 1;
+        conn.execute(
+            "INSERT INTO rounds (round_number) VALUES (?1)",
+            params![round_number]
+        )?;
     }
 
-    if let Some(&_winner) = participants.first() {
-        conn.execute(
-            "UPDATE rounds SET tournament_finished = ?1 WHERE id = ?2",
-            params![1, round_number],
-        )?;
+    conn.execute(
+        "UPDATE rounds SET tournament_finished = ?1 WHERE id = ?2",
+        params![1, round_number],
+    )?;
 
-        let winner_path = database::get_image_path_with_max_rating(&conn)?;
-        let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
+    let winner_path = database::get_image_path_with_max_rating(&conn)?;
+    let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
 
-        renderer::render_winner(&mut canvas, &winner_texture, window_width, window_height, "Copying favourites...")?;
+    renderer::render_winner(&mut canvas, &winner_texture, window_width, window_height, "Copying favourites...")?;
 
-        let percentile_map = database::calculate_percentiles(&conn)?;
-        file_system::copy_images_to_directory(percentile_map, &image_directory)?;
+    let percentile_map = database::calculate_percentiles(&conn)?;
+    file_system::copy_images_to_directory(percentile_map, &image_directory)?;
 
-        let status_done = format!("Your favs have been copied to: {}", image_directory);
-        renderer::render_winner(&mut canvas,
-                                &winner_texture,
-                                window_width,
-                                window_height,
-                                &status_done)?;
+    let status_done = format!("Your favs have been copied to: {}", image_directory);
+    renderer::render_winner(&mut canvas,
+                            &winner_texture,
+                            window_width,
+                            window_height,
+                            &status_done)?;
 
-        println!("The winner is: {}", winner_path);
+    println!("The winner is: {}", winner_path);
 
-        let mut event_pump = sdl2::init()?.event_pump()?;
+    let mut event_pump = sdl2::init()?.event_pump()?;
 
-        loop {
-            for event in event_pump.poll_iter() {
-                if let Event::Quit { .. } = event {
-                    println!("Quitting the application...");
-                    std::process::exit(0); // exit application
-                }
+    loop {
+        for event in event_pump.poll_iter() {
+            if let Event::Quit { .. } = event {
+                println!("Quitting the application...");
+                std::process::exit(0); // exit application
             }
         }
     }
-
-    Ok(())
 }
+
 fn compete_loop(
     conn: &Connection,
     event_pump: &mut EventPump,
