@@ -8,19 +8,12 @@ pub(crate) fn initialize(conn: &Connection) -> Result<()> {
                     rating INTEGER DEFAULT 0,\
                     out INTEGER DEFAULT 0)", params![])?;
     
-    conn.execute("CREATE TABLE IF NOT EXISTS rounds (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  round_number INTEGER NOT NULL,
-                  tournament_finished INTEGER DEFAULT 0
-              )", params![])?;
-
     conn.execute("CREATE TABLE IF NOT EXISTS matches (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  round_id INTEGER NOT NULL,
+                  round_number INTEGER NOT NULL DEFAULT 1,
                   participant1_id INTEGER,
                   participant2_id INTEGER,
                   winner_id INTEGER,
-                  FOREIGN KEY (round_id) REFERENCES rounds(id),
                   FOREIGN KEY (participant1_id) REFERENCES participants(id),
                   FOREIGN KEY (participant2_id) REFERENCES participants(id),
                   FOREIGN KEY (winner_id) REFERENCES participants(id)
@@ -30,7 +23,7 @@ pub(crate) fn initialize(conn: &Connection) -> Result<()> {
 }
 
 pub(crate) fn get_latest_round_number(conn: &Connection) -> Result<u64> {
-    let query = "SELECT IFNULL(MAX(round_number), 1) FROM rounds".to_string();
+    let query = "SELECT COALESCE(MAX(round_number), 1) FROM matches".to_string();
     conn.query_row(&query, params![], |row| {
         row.get::<usize, i64>(0)
     }).map(|count| count as u64)
@@ -40,9 +33,9 @@ pub(crate) fn get_remaining_participants(conn: &Connection, round_number: u64) -
     let mut sql_statement = conn.prepare(
         "SELECT id FROM images
          WHERE id NOT IN (
-             SELECT participant1_id FROM matches WHERE round_id = ?1
+             SELECT participant1_id FROM matches WHERE round_number = ?1
              UNION ALL
-             SELECT participant2_id FROM matches WHERE round_id = ?1
+             SELECT participant2_id FROM matches WHERE round_number = ?1
          ) 
          AND out != 1"
     )?;
@@ -83,7 +76,7 @@ pub(crate) fn get_image_path_from_database(conn: &Connection, id: &u64) -> Resul
     })
 }
 
-pub(crate) fn get_tournament_finished(conn: &Connection, round_number: u64) -> Result<bool> {
+pub(crate) fn _get_tournament_finished(conn: &Connection, round_number: u64) -> Result<bool> {
     conn.query_row(
         "SELECT tournament_finished FROM rounds WHERE round_number = ?1",
         params![round_number],

@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 next_round.push(winner);
 
                 conn.execute(
-                    "INSERT INTO matches (round_id, participant1_id, participant2_id, winner_id)
+                    "INSERT INTO matches (round_number, participant1_id, participant2_id, winner_id)
                          VALUES (?1, ?2, ?3, ?4)",
                     params![round_number, pair[0], pair[1], winner])?;
 
@@ -101,16 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // increment the round each loop and insert the round into a table for persistent storage
         round_number += 1;
-        conn.execute(
-            "INSERT INTO rounds (round_number) VALUES (?1)",
-            params![round_number]
-        )?;
     }
-
-    conn.execute(
-        "UPDATE rounds SET tournament_finished = ?1 WHERE id = ?2",
-        params![1, round_number],
-    )?;
 
     let winner_path = database::get_image_path_with_max_rating(&conn)?;
     let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
