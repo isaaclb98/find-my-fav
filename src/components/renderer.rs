@@ -31,7 +31,7 @@ pub fn initialize_sdl() -> Result<(WindowCanvas, TextureCreator<WindowContext>, 
     let canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
     let texture_creator = canvas.texture_creator();
 
-    // Initialize SDL2_image with support for PNG and JPEG formats
+    // initialize SDL2_image with support for PNG and JPEG formats
     image::init(InitFlag::PNG | InitFlag::JPG)?;
 
     Ok((canvas, texture_creator, window_width, window_height))
@@ -181,7 +181,7 @@ pub fn render_winner(
     Ok(texture_rect)
 }
 
-pub fn animate_zoom_out(
+pub fn animate_zoom_out_and_in(
     canvas: &mut WindowCanvas,
     texture: &sdl2::render::Texture,
     rect: Rect,

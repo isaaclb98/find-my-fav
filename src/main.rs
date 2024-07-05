@@ -1,5 +1,6 @@
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+
 use rusqlite::{Connection, params, Result};
 use sdl2::event::Event;
 use sdl2::EventPump;
@@ -7,8 +8,7 @@ use sdl2::rect::Rect;
 
 use components::file_system;
 use components::renderer;
-
-use crate::components::database::DatabaseTable;
+use components::database;
 
 mod components;
 
@@ -26,25 +26,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::open("C:/Users/Isaac/RustroverProjects/database.db")?;
 
     // initialize database tables that are needed for tournament logic
-    DatabaseTable::initialize(&conn)?;
-
-    // this whole struct is stupid. Will need to rework this in the future
-    let database = DatabaseTable {
-        conn: &conn,
-        table: String::from("images"),
-        columns: vec![
-            String::from("id"),
-            String::from("image_path"),
-            String::from("rating"),
-        ]
-    };
-
+    database::initialize(&conn)?;
+    
     let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
 
     let mut rng = thread_rng();
-    let mut round_number = database.get_latest_round_number()?;
-    let mut participants = database.get_remaining_participants(round_number)?;
-    let tournament_finished = database.get_tournament_finished(round_number).unwrap_or(false);
+    let mut round_number = database::get_latest_round_number(&conn)?;
+    let mut participants = database::get_remaining_participants(&conn, round_number)?;
+    let tournament_finished = database::get_tournament_finished(&conn, round_number).unwrap_or(false);
 
     // run until only one left (winner)
     while participants.len() > 1 && !tournament_finished {
@@ -61,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //     )?;
         // }
 
-        database.conn.execute(
+        conn.execute(
             "INSERT INTO rounds (round_number) VALUES (?1)",
             params![round_number]
         )?;
@@ -76,8 +65,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for pair in participants.chunks(2) {
             if pair.len() == 2 {
                 // get our image paths
-                let image_1 = database.get_image_path_from_database(&pair[0])?;
-                let image_2 = database.get_image_path_from_database(&pair[1])?;
+                let image_1 = database::get_image_path_from_database(&conn, &pair[0])?;
+                let image_2 = database::get_image_path_from_database(&conn, &pair[1])?;
 
                 // get our image textures
                 let texture_1 = renderer::load_texture(&texture_creator, &image_1)?;
@@ -89,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut event_pump = sdl2::init()?.event_pump()?;
 
                 let (winner, stupid) = compete_loop(
-                    &database,
+                    &conn,
                     &mut event_pump,
                     pair[0],
                     pair[1],
@@ -98,19 +87,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )?;
 
                 if stupid == 1 {
-                    renderer::animate_zoom_out(&mut canvas, &texture_1, texture1_rect, 0.96)?;
+                    renderer::animate_zoom_out_and_in(&mut canvas, &texture_1, texture1_rect, 0.96)?;
                 } else {
-                    renderer::animate_zoom_out(&mut canvas, &texture_2, texture2_rect, 0.96)?;
+                    renderer::animate_zoom_out_and_in(&mut canvas, &texture_2, texture2_rect, 0.96)?;
                 }
 
                 next_round.push(winner);
 
-                database.conn.execute(
+                conn.execute(
                     "INSERT INTO matches (round_id, participant1_id, participant2_id, winner_id)
                          VALUES (?1, ?2, ?3, ?4)",
                     params![round_number, pair[0], pair[1], winner])?;
 
-                let match_id = database.conn.last_insert_rowid();
+                let match_id = conn.last_insert_rowid();
 
                 println!("The winner of round {}, match {} is: {}",
                          round_number,
@@ -127,17 +116,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(&_winner) = participants.first() {
-        database.conn.execute(
+        conn.execute(
             "UPDATE rounds SET tournament_finished = ?1 WHERE id = ?2",
             params![1, round_number],
         )?;
 
-        let winner_path = database.get_image_path_with_max_rating()?;
+        let winner_path = database::get_image_path_with_max_rating(&conn)?;
         let winner_texture = renderer::load_texture(&texture_creator, &winner_path)?;
 
         renderer::render_winner(&mut canvas, &winner_texture, window_width, window_height, "Copying favourites...")?;
 
-        let percentile_map = database.calculate_percentiles()?;
+        let percentile_map = database::calculate_percentiles(&conn)?;
         file_system::copy_images_to_directory(percentile_map, &image_directory)?;
 
         let status_done = format!("Your favs have been copied to: {}", image_directory);
@@ -164,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 fn compete_loop(
-    database_table: &DatabaseTable,
+    conn: &Connection,
     event_pump: &mut EventPump,
     participant1: u64,
     participant2: u64,
@@ -181,11 +170,11 @@ fn compete_loop(
                 Event::MouseButtonDown { x, y, .. } => {
                     if texture1_rect.contains_point((x,y)) {
                         println!("Image 1 clicked");
-                        database_table.increment_rating(participant1)?;
+                        database::increment_rating(&conn, participant1)?;
                         return Ok((participant1, 1));
                     } else if texture2_rect.contains_point((x,y)) {
                         println!("Image 2 clicked");
-                        database_table.increment_rating(participant2)?;
+                        database::increment_rating(&conn, participant2)?;
                         return Ok((participant2, 2));
                     }
                 },
