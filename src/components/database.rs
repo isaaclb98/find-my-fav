@@ -29,6 +29,19 @@ pub(crate) fn get_latest_round_number(conn: &Connection) -> Result<u64> {
     }).map(|count| count as u64)
 }
 
+pub(crate) fn get_total_number_of_rounds(conn: &Connection) -> Result<u64> { 
+    let total_images: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM images",
+        params![],
+        |row| row.get(0),
+    )?;
+
+    if total_images < 2 {
+        return Ok(0);
+    }
+    Ok((total_images as f64).log2().ceil() as u64)
+}
+
 pub(crate) fn get_remaining_participants(conn: &Connection, round_number: u64) -> Result<Vec<u64>> {
     let mut sql_statement = conn.prepare(
         "SELECT id FROM images
@@ -114,10 +127,7 @@ pub(crate) fn calculate_percentiles(conn: &Connection) -> Result<HashMap<String,
         let percentile = (1.0 - (index as f64 / total_images)) * 100.0;
         percentiles.insert(image_path.clone(), percentile);
     }
-
-    for (imagepath, percentile) in &percentiles {
-        println!("{}: {}", percentile, imagepath);
-    }
+    
     Ok(percentiles)
 }
 

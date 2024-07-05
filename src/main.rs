@@ -29,20 +29,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
     let mut round_number = database::get_latest_round_number(&conn)?;
-
-    let mut rng = thread_rng();
+    let total_number_of_rounds = database::get_total_number_of_rounds(&conn)?;
     
     // get participants based on round number
     let mut participants = database::get_remaining_participants(&conn, round_number)?;
     
     // run until only one left (winner)
     while participants.len() > 1 {
+        let mut rng = thread_rng();
 
         // shuffle our vector
         participants.shuffle(&mut rng);
-
-        // prepare our next round of participants
-        let mut next_round: Vec<u64> = Vec::new();
 
         // chunk the vector into pairs and have them all compete
         for pair in participants.chunks(2) {
@@ -77,8 +74,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 renderer::animate_zoom_out_and_in(&mut canvas, winner_texture, if winner == pair[0] { texture1_rect } else { texture2_rect }, 0.96)?;
                 database::set_loser_out(&conn, loser_id)?;
                 database::increment_rating(&conn, winner)?;
-                
-                next_round.push(winner);
 
                 conn.execute(
                     "INSERT INTO matches (round_number, participant1_id, participant2_id, winner_id)
@@ -87,17 +82,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let match_id = conn.last_insert_rowid();
 
-                println!("The winner of round {}, match {} is: {}",
+                println!("The winner of round {} (of {}), match {} is: {}",
                          round_number,
-                         match_id,
+                         total_number_of_rounds,
+                         match_id - (round_number - 1) as i64,
                          if winner == pair[0] {image_1} else {image_2});
-            } else {
-                next_round.push(pair[0]);
             }
         }
 
         // increment the round each loop and insert the round into a table for persistent storage
         round_number += 1;
+        // persist the change when match increases. create a fake round.
+        conn.execute(
+            "INSERT INTO matches (round_number, participant1_id, participant2_id, winner_id)
+                         VALUES (?1, ?2, ?3, ?4)",
+            params![round_number, 0, 0, 0])?;
 
         // update participants after every loop
         participants = database::get_remaining_participants(&conn, round_number)?;
