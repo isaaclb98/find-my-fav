@@ -29,7 +29,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let (mut canvas, texture_creator, window_width, window_height) = renderer::initialize_sdl()?;
     let mut round_number = database::get_latest_round_number(&conn)?;
-    // let tournament_finished = database::get_tournament_finished(&conn, round_number).unwrap_or(false);
 
     let mut rng = thread_rng();
     
@@ -96,11 +95,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 next_round.push(pair[0]);
             }
         }
-        // update participants to the winners of the round
-        participants = next_round;
 
         // increment the round each loop and insert the round into a table for persistent storage
         round_number += 1;
+
+        // update participants after every loop
+        participants = database::get_remaining_participants(&conn, round_number)?;
     }
 
     let winner_path = database::get_image_path_with_max_rating(&conn)?;
