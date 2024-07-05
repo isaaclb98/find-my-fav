@@ -1,4 +1,3 @@
-use rand::*;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 use rusqlite::{Connection, params, Result};
@@ -14,16 +13,22 @@ use crate::components::database::DatabaseTable;
 mod components;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // const NEW_DIRECTORY: &str = "C:/Users/Isaac/Pictures/favourites";
+
+    // create the directory to store the images after the tournament has been finished
     let image_directory = file_system::create_image_directory().to_string_lossy().to_string();
     println!("{}", image_directory);
 
-    // Open a connection to the SQLite database
+    // open a connection to the SQLite database
+    // maybe in the future: create an sqlite database if the user does not already have one
+    // this has many implications. For instance, we may have to integrate our image_to_db program.
+    // that way, the user need only drag or type in a folder on their computer from which to get images
+    // and the database will be created automatically.
     let conn = Connection::open("C:/Users/Isaac/RustroverProjects/database.db")?;
 
+    // initialize database tables that are needed for tournament logic
     DatabaseTable::initialize(&conn)?;
 
-    // particular to my database. Will try to generalize further in the future.
+    // this whole struct is stupid. Will need to rework this in the future
     let database = DatabaseTable {
         conn: &conn,
         table: String::from("images"),
@@ -45,6 +50,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while participants.len() > 1 && !tournament_finished {
         // increment the round each loop and insert the round into a table for persistent storage
         round_number += 1;
+
+        // // Check if the current round number already exists in the database
+        // if !database.round_exists(round_number)? {
+        //     // Increment the round number and insert into the database if it doesn't exist
+        //     round_number += 1;
+        //     database.conn.execute(
+        //         "INSERT INTO rounds (round_number) VALUES (?1)",
+        //         rusqlite::params![round_number]
+        //     )?;
+        // }
+
         database.conn.execute(
             "INSERT INTO rounds (round_number) VALUES (?1)",
             params![round_number]
@@ -106,9 +122,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // update participants to the winners of the round
         participants = next_round;
+
+        // database.update_tournament_state(round_number, participants.clone())?;
     }
 
-    if let Some(&winner) = participants.get(0) {
+    if let Some(&_winner) = participants.first() {
         database.conn.execute(
             "UPDATE rounds SET tournament_finished = ?1 WHERE id = ?2",
             params![1, round_number],
@@ -140,7 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     std::process::exit(0); // exit application
                 }
             }
-        }    
+        }
     }
 
     Ok(())
