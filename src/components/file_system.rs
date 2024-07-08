@@ -2,15 +2,35 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::io::Result;
+use std::time::{SystemTime, UNIX_EPOCH};
+use chrono::Local;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+
 
 fn get_user_home_directory() -> PathBuf {
     dirs::home_dir().expect("Could not find the home directory")
 }
 
 pub fn create_image_directory() -> PathBuf {
+    // get users home directory. platform-agnostic.
     let home = get_user_home_directory();
-    home.join("Pictures").join("favourites")
+    
+    // get date
+    let current_date = Local::now().format("%Y%m%d").to_string();
+    
+    // get number of seconds from unix epoch.
+    let start = SystemTime::now();
+    let since_epoch = start.duration_since(UNIX_EPOCH)
+        .expect("Time error");
+    let seconds = since_epoch.as_secs();
+    
+    // retrieve the last eight digits.
+    let date = format!("{}", seconds);
+    let last_eight_digits = &date[date.len() - 8 ..];
+    
+    // e.g. favourites-43253123
+    // could improve this later but for now I just wanted a somewhat unique directory name
+    home.join("Pictures").join(format!("favourites")).join(format!("{}-{}", current_date, last_eight_digits))
 }
 
 pub fn copy_images_to_directory(percentile_map: HashMap<String, f64>, new_directory: &str) -> Result<()> {
@@ -35,7 +55,7 @@ pub fn copy_images_to_directory(percentile_map: HashMap<String, f64>, new_direct
                     let destination_path = Path::new(new_directory).join(new_file_name);
 
                     // copy the file
-                    fs::copy(&image_path, &destination_path)?;
+                    fs::copy(image_path, destination_path)?;
                 }
             }
         }

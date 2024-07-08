@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use rusqlite::{Connection, params, Result};
+use sdl2::log::Category::Error;
 
 pub(crate) fn initialize(conn: &Connection) -> Result<()> {
     conn.execute("CREATE TABLE IF NOT EXISTS images (\
@@ -30,11 +31,7 @@ pub(crate) fn get_latest_round_number(conn: &Connection) -> Result<u64> {
 }
 
 pub(crate) fn get_total_number_of_rounds(conn: &Connection) -> Result<u64> { 
-    let total_images: u64 = conn.query_row(
-        "SELECT COUNT(*) FROM images",
-        params![],
-        |row| row.get(0),
-    )?;
+    let total_images = get_total_number_of_participants(conn)?;
 
     if total_images < 2 {
         return Ok(0);
@@ -82,7 +79,7 @@ pub(crate) fn increment_rating(conn: &Connection, image_id: u64) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn get_image_path_from_database(conn: &Connection, id: &u64) -> Result<String> {
+pub(crate) fn get_image_path_from_database(conn: &Connection, id: u64) -> Result<String> {
     let query = "SELECT image_path FROM images WHERE id = ?1".to_string();
     conn.query_row(&query, params![id], |row| {
         row.get(0)
@@ -131,8 +128,14 @@ pub(crate) fn calculate_percentiles(conn: &Connection) -> Result<HashMap<String,
     Ok(percentiles)
 }
 
-fn _get_image_path(conn: &Connection, image_id: u64) -> Result<String> {
-    conn.query_row("SELECT image_path FROM images WHERE id = ?1", params![image_id], |row| row.get(0))
+fn get_total_number_of_participants(conn: &Connection) -> Result<u64> {
+    let total_images: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM images",
+        params![],
+        |row| row.get(0),
+    )?;
+
+    Ok(total_images)
 }
 
 fn get_rating(conn: &Connection, image_id: u64) -> Result<u32> {
@@ -141,4 +144,38 @@ fn get_rating(conn: &Connection, image_id: u64) -> Result<u32> {
         params![image_id],
         |row| row.get(0),
     )
+}
+
+pub(crate) fn get_number_of_matches(conn: &Connection, round_number: u64) -> Result<u64> {
+    let total_images = get_total_number_of_participants(conn)?;
+
+    if round_number < 1 || total_images < 2 {
+        return Ok(0);
+    }
+
+    let mut remaining = total_images;
+    for _ in 1..round_number {
+        remaining = (remaining + 1) / 2; // ceil division by 2
+    }
+    Ok((remaining + 1) / 2)
+}
+
+pub(crate) fn get_total_number_of_matches_until_now(conn: &Connection, round_number: u64) -> Result<u64>  {
+    if round_number == 1 {
+        return get_number_of_matches(conn, round_number);
+    }
+    
+    let matches_for_current_round = get_number_of_matches(conn, round_number)?;
+    let matches_for_past_rounds = get_total_number_of_matches_until_now(conn, round_number - 1)?;
+
+    Ok(matches_for_current_round + matches_for_past_rounds)
+}
+
+pub(crate) fn insert_match_into_database(conn: &Connection, round_number: u64, participant1: u64, participant2: u64, winner: u64) -> Result<()> {
+    conn.execute(
+        "INSERT INTO matches (round_number, participant1_id, participant2_id, winner_id)
+                         VALUES (?1, ?2, ?3, ?4)",
+        params![round_number, participant1, participant2, winner])?;
+
+    Ok(())
 }
