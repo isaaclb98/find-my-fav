@@ -1,7 +1,31 @@
+use crate::resources::ImageFolderPath;
+use glob::glob;
 use rusqlite::{params, Connection, Result};
 use std::collections::HashMap;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+// fn initialize_connection() -> Connection {}
 
-pub(crate) fn initialize(conn: &Connection) -> Result<()> {
+pub(crate) fn initialize_database(image_folder_path: PathBuf) -> Result<()> {
+    let exe_path = env::current_exe().expect("Failed to get the executable path");
+    let exe_dir = exe_path
+        .parent()
+        .expect("Failed to get the executable directory");
+
+    // create the path for the new SQLite database
+    let db_path = exe_dir.join("find_my_fav_database.db");
+
+    // check if the database file exists and delete it if it does
+    if db_path.exists() {
+        fs::remove_file(&db_path).expect("Failed to delete existing database file");
+    }
+
+    println!("Initializing database...");
+
+    // create a new SQLite database
+    let conn = Connection::open(db_path)?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS images (\
                     id INTEGER PRIMARY KEY AUTOINCREMENT,\
@@ -24,6 +48,29 @@ pub(crate) fn initialize(conn: &Connection) -> Result<()> {
               )",
         params![],
     )?;
+
+    let image_patterns = vec!["*.jpg", "*.jpeg", "*.png"];
+    let image_folder_path = image_folder_path.to_string_lossy().to_string();
+
+    for pattern in image_patterns {
+        let full_pattern = format!("{}/**/{}", image_folder_path, pattern);
+        for entry in glob(&full_pattern).expect("Failed to read glob pattern.") {
+            match entry {
+                Ok(path) => {
+                    let image_path = path.to_string_lossy();
+                    let image_path = image_path.replace("\\", "/");
+
+                    conn.execute(
+                        "INSERT INTO images (image_path) VALUES (?1)",
+                        params![image_path],
+                    )?;
+                }
+                Err(e) => println!("{:?}", e),
+            }
+        }
+    }
+
+    println!("Successfully initialized database...");
 
     Ok(())
 }

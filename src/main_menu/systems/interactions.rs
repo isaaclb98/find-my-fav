@@ -24,6 +24,7 @@ pub fn interact_with_folder_button(
                         println!("{}", folder_path.to_string_lossy().to_string());
 
                         image_folder_path_resource.image_folder_path = Some(folder_path);
+                        app_state_next_state.set(AppState::SpeedSelect);
                     }
                     None => {
                         println!("Failed to open a folder. Try again?")
