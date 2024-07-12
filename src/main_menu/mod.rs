@@ -15,7 +15,11 @@ impl Plugin for MainMenuPlugin {
         app.add_systems(OnEnter(AppState::MainMenu), spawn_main_menu)
             .add_systems(
                 Update,
-                (interact_with_folder_button).run_if(in_state(MainMenu)),
+                (
+                    interact_with_folder_button,
+                    interact_with_resume_previous_button,
+                )
+                    .run_if(in_state(MainMenu)),
             );
     }
 }

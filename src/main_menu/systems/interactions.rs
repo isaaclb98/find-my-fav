@@ -50,7 +50,9 @@ pub fn interact_with_resume_previous_button(
 ) {
     if let Ok((interaction, mut background_color)) = button_query.get_single_mut() {
         match *interaction {
-            Interaction::Pressed => {}
+            Interaction::Pressed => {
+                println!("Resume a previous tournament.");
+            }
             Interaction::Hovered => {
                 *background_color = BackgroundColor::from(HOVERED_BUTTON_COLOR);
             }

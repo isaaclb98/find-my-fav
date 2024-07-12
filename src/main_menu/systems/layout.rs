@@ -87,7 +87,7 @@ pub fn build_main_menu(
                         background_color: NORMAL_BUTTON_COLOR.into(),
                         ..default()
                     },
-                    OpenFolderButton {},
+                    ResumePreviousButton {},
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle {
