@@ -7,7 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 // fn initialize_connection() -> Connection {}
 
-pub(crate) fn initialize_database(image_folder_path: PathBuf) -> Result<()> {
+fn get_database_path() -> Result<PathBuf> {
     let exe_path = env::current_exe().expect("Failed to get the executable path");
     let exe_dir = exe_path
         .parent()
@@ -15,6 +15,11 @@ pub(crate) fn initialize_database(image_folder_path: PathBuf) -> Result<()> {
 
     // create the path for the new SQLite database
     let db_path = exe_dir.join("find_my_fav_database.db");
+    Ok(db_path)
+}
+
+pub(crate) fn initialize_database(image_folder_path: PathBuf) -> Result<()> {
+    let db_path = get_database_path().expect("Error getting database path.");
 
     // check if the database file exists and delete it if it does
     if db_path.exists() {
@@ -75,7 +80,10 @@ pub(crate) fn initialize_database(image_folder_path: PathBuf) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn get_latest_round_number(conn: &Connection) -> Result<u64> {
+pub(crate) fn get_latest_round_number() -> Result<u64> {
+    let db_path = get_database_path().expect("Error getting database path");
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
     let query = "SELECT COALESCE(MAX(round_number), 1) FROM matches".to_string();
     conn.query_row(&query, params![], |row| row.get::<usize, i64>(0))
         .map(|count| count as u64)
@@ -90,7 +98,12 @@ pub(crate) fn get_total_number_of_rounds(conn: &Connection) -> Result<u64> {
     Ok((total_images as f64).log2().ceil() as u64)
 }
 
-pub(crate) fn get_remaining_participants(conn: &Connection, round_number: u64) -> Result<Vec<u64>> {
+pub(crate) fn get_remaining_participants() -> Result<Vec<u64>> {
+    let db_path = get_database_path().expect("Error getting database path.");
+    let round_number = get_latest_round_number().expect("Failed to get round_number");
+
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
     let mut sql_statement = conn.prepare(
         "SELECT id FROM images
          WHERE id NOT IN (
@@ -130,9 +143,15 @@ pub(crate) fn increment_rating(conn: &Connection, image_id: u64) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn get_image_path_from_database(conn: &Connection, id: u64) -> Result<String> {
+pub(crate) fn get_image_path_from_database(id: u64) -> Result<PathBuf> {
+    let db_path = get_database_path().expect("Error getting database path.");
+
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
     let query = "SELECT image_path FROM images WHERE id = ?1".to_string();
-    conn.query_row(&query, params![id], |row| row.get(0))
+    let path: String = conn.query_row(&query, params![id], |row| row.get(0))?;
+
+    Ok(PathBuf::from(path))
 }
 
 pub(crate) fn _get_tournament_finished(conn: &Connection, round_number: u64) -> Result<bool> {

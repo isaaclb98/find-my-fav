@@ -2,7 +2,7 @@ use crate::main_menu::MainMenuPlugin;
 use crate::resources::ImageFolderPath;
 use crate::speed_select::SpeedSelectPlugin;
 use crate::systems::*;
-use crate::AppState::SpeedSelect;
+use crate::AppState::{SpeedSelect, Tournament};
 use bevy::prelude::*;
 
 mod database;
@@ -33,5 +33,8 @@ fn main() {
             OnEnter(SpeedSelect),
             initialize_database_if_image_folder_path,
         )
+        .add_systems(OnEnter(Tournament), get_two_participants)
+        .add_event::<ImageLoadedEvent>()
+        .add_systems(Update, check_image_loaded)
         .run();
 }
