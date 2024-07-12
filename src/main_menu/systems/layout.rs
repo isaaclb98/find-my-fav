@@ -12,6 +12,15 @@ pub fn spawn_main_menu(
     let main_menu_entity = build_main_menu(&mut commands, &asset_server, &window_query);
 }
 
+pub fn despawn_main_menu(
+    mut commands: Commands,
+    main_menu_query: Query<Entity, With<MainMenuComponent>>,
+) {
+    if let Ok(main_menu_entity) = main_menu_query.get_single() {
+        commands.entity(main_menu_entity).despawn_recursive();
+    }
+}
+
 pub fn build_main_menu(
     commands: &mut Commands,
     asset_server: &Res<AssetServer>,
@@ -44,7 +53,7 @@ pub fn build_main_menu(
                     sections: vec![TextSection::new(
                         "FindMyFav",
                         TextStyle {
-                            font: asset_server.load("fonts/OpenSans-Regular.ttf"),
+                            font: asset_server.load("fonts/OpenSans-SemiBold.ttf"),
                             font_size: 64.0,
                             color: Color::BLACK,
                         },

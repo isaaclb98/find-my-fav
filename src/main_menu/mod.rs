@@ -20,6 +20,7 @@ impl Plugin for MainMenuPlugin {
                     interact_with_resume_previous_button,
                 )
                     .run_if(in_state(MainMenu)),
-            );
+            )
+            .add_systems(OnExit(AppState::MainMenu), despawn_main_menu);
     }
 }

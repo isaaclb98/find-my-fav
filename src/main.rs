@@ -1,5 +1,6 @@
 use crate::main_menu::MainMenuPlugin;
 use crate::resources::ImageFolderPath;
+use crate::speed_select::SpeedSelectPlugin;
 use crate::systems::*;
 use crate::AppState::SpeedSelect;
 use bevy::prelude::*;
@@ -8,6 +9,7 @@ mod database;
 mod file_system;
 mod main_menu;
 mod resources;
+mod speed_select;
 mod systems;
 
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
@@ -25,6 +27,7 @@ fn main() {
         .init_state::<AppState>()
         .init_resource::<ImageFolderPath>()
         .add_plugins(MainMenuPlugin)
+        .add_plugins(SpeedSelectPlugin)
         .add_systems(Startup, spawn_camera)
         .add_systems(
             OnEnter(SpeedSelect),
