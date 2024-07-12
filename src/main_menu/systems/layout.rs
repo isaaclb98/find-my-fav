@@ -63,7 +63,7 @@ pub fn build_main_menu(
                         background_color: NORMAL_BUTTON_COLOR.into(),
                         ..default()
                     },
-                    FolderButton {},
+                    OpenFolderButton {},
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle {
@@ -87,7 +87,7 @@ pub fn build_main_menu(
                         background_color: NORMAL_BUTTON_COLOR.into(),
                         ..default()
                     },
-                    FolderButton {},
+                    OpenFolderButton {},
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle {
