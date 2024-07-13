@@ -1,4 +1,8 @@
-use bevy::prelude::{AlignItems, FlexDirection, JustifyContent, Style, UiRect, Val};
+use bevy::asset::AssetServer;
+use bevy::color::Color;
+use bevy::prelude::{
+    AlignItems, FlexDirection, JustifyContent, Res, Style, TextStyle, UiRect, Val,
+};
 
 pub const NODE_BUNDLE_EMPTY_COLUMN_STYLE: Style = {
     let mut style = Style::DEFAULT;
@@ -27,3 +31,11 @@ pub const NODE_BUNDLE_EMPTY_ROW_STYLE: Style = {
 
     style
 };
+
+pub fn get_button_text_style(asset_server: &Res<AssetServer>) -> TextStyle {
+    TextStyle {
+        font: asset_server.load("fonts/OpenSans-Regular.ttf"),
+        font_size: 32.0,
+        color: Color::BLACK,
+    }
+}

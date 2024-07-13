@@ -13,11 +13,3 @@ pub const BUTTON_STYLE: Style = {
 
     style
 };
-
-pub fn get_button_text_style(asset_server: &Res<AssetServer>) -> TextStyle {
-    TextStyle {
-        font: asset_server.load("fonts/OpenSans-Regular.ttf"),
-        font_size: 32.0,
-        color: Color::BLACK,
-    }
-}

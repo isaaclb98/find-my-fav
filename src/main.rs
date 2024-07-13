@@ -53,12 +53,16 @@ fn main() {
             initialize_database_if_image_folder_path,
         )
         .add_systems(
-            OnEnter(Tournament),
-            get_participants_for_round.run_if(in_state(TournamentState::Generating)),
+            Update,
+            get_participants_for_round
+                .run_if(in_state(AppState::Tournament))
+                .run_if(in_state(TournamentState::Generating)),
         )
         .add_systems(
             Update,
-            generate_images_to_click.run_if(in_state(TournamentState::Displaying)),
+            generate_images_to_click
+                .run_if(in_state(AppState::Tournament))
+                .run_if(in_state(TournamentState::Displaying)),
         )
         .add_systems(
             Update,
@@ -67,7 +71,13 @@ fn main() {
                 interact_with_right_image_button,
                 image_clicked_decision_logic,
             )
+                .run_if(in_state(AppState::Tournament))
                 .run_if(in_state(TournamentState::Deciding)),
         )
+        .add_systems(
+            Update,
+            display_tournament_state.run_if(in_state(AppState::Tournament)),
+        )
+        .add_systems(OnEnter(AppState::Finished), generate_finished_screen)
         .run();
 }
