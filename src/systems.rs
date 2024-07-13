@@ -12,7 +12,7 @@ use rand::{random, thread_rng};
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub fn spawn_camera(mut commands: Commands, window_query: Query<&Window, With<PrimaryWindow>>) {
     let window: &Window = window_query.get_single().unwrap();
@@ -54,27 +54,6 @@ fn get_image(
     });
 }
 
-pub fn get_two_participants(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
-) {
-    let mut participants = get_remaining_participants().unwrap();
-
-    let mut rng = thread_rng();
-    participants.shuffle(&mut rng);
-
-    for pair in participants.chunks(2) {
-        if pair.len() == 2 {
-            let image_1 = get_image_path_from_database(&pair[0]).expect("Er");
-
-            get_image(&mut commands, &asset_server, image_1.clone(), &window_query);
-
-            thread::sleep(Duration::from_millis(100));
-        }
-    }
-}
-
 #[derive(Resource, Default)]
 pub struct ParticipantsDeque {
     deque: VecDeque<u64>,
@@ -93,6 +72,8 @@ pub fn get_participants_for_round(
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut next_tournament_state: ResMut<NextState<TournamentState>>,
 ) {
+    let start_time = Instant::now();
+
     let mut participants = get_remaining_participants().unwrap();
 
     let mut rng = thread_rng();
@@ -100,9 +81,10 @@ pub fn get_participants_for_round(
 
     for participant in participants {
         participants_deque_resource.deque.push_back(participant);
-        thread::sleep(Duration::from_millis(50));
     }
 
+    let duration = start_time.elapsed();
+    println!("get_participants_for_round took {:?}", duration);
     next_tournament_state.set(TournamentState::Displaying);
 }
 
@@ -122,6 +104,8 @@ pub fn generate_images_to_click(
     participants_deque_resource: Res<ParticipantsDeque>,
     mut next_tournament_state: ResMut<NextState<TournamentState>>,
 ) {
+    let start_time = Instant::now();
+
     let window: &Window = window_query.get_single().unwrap();
     let window_width = window.width();
     let window_height = window.height();
@@ -143,6 +127,9 @@ pub fn generate_images_to_click(
     // Load the image using the `image` crate
     let image_1 = image::open(&image_path_1).expect("Failed to load image");
     let image_2 = image::open(&image_path_2).expect("Failed to load image");
+
+    let duration = start_time.elapsed();
+    println!("getting the images took {:?}", duration);
 
     // Get the image dimensions
     let (width_1, height_1) = image_1.dimensions();
@@ -180,6 +167,8 @@ pub fn generate_images_to_click(
     let texture_handle_1: Handle<Image> = asset_server.load(image_path_1);
     let texture_handle_2: Handle<Image> = asset_server.load(image_path_2);
 
+    let start_time = Instant::now();
+
     commands
         .spawn((
             NodeBundle {
@@ -196,15 +185,18 @@ pub fn generate_images_to_click(
                 })
                 .with_children(|parent| {
                     // image 1
-                    parent.spawn(ImageBundle {
-                        style: Style {
-                            width: Val::Px(final_width_1),
-                            height: Val::Px(final_height_1),
-                            ..Default::default()
+                    parent.spawn((
+                        ButtonBundle {
+                            style: Style {
+                                width: Val::Px(final_width_1),
+                                height: Val::Px(final_height_1),
+                                ..Default::default()
+                            },
+                            image: UiImage::new(texture_handle_1),
+                            ..default()
                         },
-                        image: UiImage::new(texture_handle_1),
-                        ..default()
-                    });
+                        LeftImageComponent {},
+                    ));
                 });
 
             parent
@@ -214,17 +206,23 @@ pub fn generate_images_to_click(
                 })
                 .with_children(|parent| {
                     // image 2
-                    parent.spawn(ImageBundle {
-                        style: Style {
-                            width: Val::Px(final_width_2),
-                            height: Val::Px(final_height_2),
-                            ..Default::default()
+                    parent.spawn((
+                        ButtonBundle {
+                            style: Style {
+                                width: Val::Px(final_width_2),
+                                height: Val::Px(final_height_2),
+                                ..Default::default()
+                            },
+                            image: UiImage::new(texture_handle_2),
+                            ..default()
                         },
-                        image: UiImage::new(texture_handle_2),
-                        ..default()
-                    });
+                        RightImageComponent {},
+                    ));
                 });
         });
+
+    let duration = start_time.elapsed();
+    println!("displaying the images took {:?}", duration);
 
     next_tournament_state.set(TournamentState::Deciding);
 }
