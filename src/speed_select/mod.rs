@@ -1,15 +1,12 @@
-use crate::speed_select::components::*;
-use crate::speed_select::systems::interactions::*;
-use crate::speed_select::systems::layout::{
-    build_speed_select, despawn_speed_select, spawn_speed_select,
-};
+use crate::speed_select::interactions::*;
+use crate::speed_select::layout::*;
 use crate::AppState;
 use bevy::app::{App, Plugin, Update};
 use bevy::prelude::*;
 
 mod components;
-mod styles;
-mod systems;
+pub mod interactions;
+pub mod layout;
 
 pub struct SpeedSelectPlugin;
 

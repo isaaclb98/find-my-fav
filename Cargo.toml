@@ -15,3 +15,6 @@ rayon = "1.5.1"
 chrono = "0.4"
 bevy = { version = "0.14.0", features = ["png", "jpeg"] }
 rfd = "0.14.1"
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -1,5 +1,5 @@
 use crate::speed_select::components::*;
-use crate::speed_select::styles::*;
+use crate::styles::*;
 use crate::AppState;
 use bevy::prelude::*;
 

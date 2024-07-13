@@ -1,4 +1,4 @@
-use crate::systems::{LeftImageComponent, RightImageComponent};
+use crate::tournament::components::{LeftImageComponent, RightImageComponent};
 use bevy::prelude::*;
 
 #[derive(Event)]

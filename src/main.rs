@@ -1,18 +1,15 @@
-use crate::interactions::{
-    interact_with_left_image_button, interact_with_right_image_button, ImageClickedEvent,
-};
+use bevy::prelude::*;
+use bevy::window::{WindowMode, WindowTheme};
+
 use crate::main_menu::MainMenuPlugin;
 use crate::resources::ImageFolderPath;
 use crate::speed_select::SpeedSelectPlugin;
 use crate::systems::*;
-use crate::AppState::{SpeedSelect, Tournament};
-use bevy::prelude::*;
-use bevy::window::{PrimaryWindow, WindowMode, WindowTheme};
+use crate::tournament::TournamentPlugin;
+use crate::AppState::SpeedSelect;
 
-mod components;
 mod database;
 mod file_system;
-mod interactions;
 mod main_menu;
 mod resources;
 mod speed_select;
@@ -40,43 +37,15 @@ fn main() {
             }),
             ..default()
         }))
-        .init_state::<AppState>()
-        .init_state::<TournamentState>()
-        .add_event::<ImageClickedEvent>()
-        .init_resource::<ImageFolderPath>()
-        .init_resource::<ParticipantsDeque>()
         .add_plugins(MainMenuPlugin)
         .add_plugins(SpeedSelectPlugin)
+        .add_plugins(TournamentPlugin)
+        .init_state::<AppState>()
+        .init_resource::<ImageFolderPath>()
         .add_systems(Startup, spawn_camera)
         .add_systems(
             OnEnter(SpeedSelect),
             initialize_database_if_image_folder_path,
-        )
-        .add_systems(
-            Update,
-            get_participants_for_round
-                .run_if(in_state(AppState::Tournament))
-                .run_if(in_state(TournamentState::Generating)),
-        )
-        .add_systems(
-            Update,
-            generate_images_to_click
-                .run_if(in_state(AppState::Tournament))
-                .run_if(in_state(TournamentState::Displaying)),
-        )
-        .add_systems(
-            Update,
-            (
-                interact_with_left_image_button,
-                interact_with_right_image_button,
-                image_clicked_decision_logic,
-            )
-                .run_if(in_state(AppState::Tournament))
-                .run_if(in_state(TournamentState::Deciding)),
-        )
-        .add_systems(
-            Update,
-            display_tournament_state.run_if(in_state(AppState::Tournament)),
         )
         .add_systems(OnEnter(AppState::Finished), generate_finished_screen)
         .run();

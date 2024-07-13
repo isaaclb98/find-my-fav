@@ -1,11 +1,10 @@
-use crate::resources::ImageFolderPath;
-use glob::glob;
-use rusqlite::{params, Connection, Result};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-// fn initialize_connection() -> Connection {}
+
+use glob::glob;
+use rusqlite::{params, Connection, Result};
 
 fn get_database_path() -> Result<PathBuf> {
     let exe_path = env::current_exe().expect("Failed to get the executable path");
@@ -89,7 +88,7 @@ pub(crate) fn get_latest_round_number() -> Result<u64> {
         .map(|count| count as u64)
 }
 
-pub(crate) fn get_total_number_of_rounds(conn: &Connection) -> Result<u64> {
+pub(crate) fn _get_total_number_of_rounds(conn: &Connection) -> Result<u64> {
     let total_images = get_total_number_of_participants(conn)?;
 
     if total_images < 2 {
@@ -122,7 +121,7 @@ pub(crate) fn get_remaining_participants() -> Result<Vec<u64>> {
     Ok(participants)
 }
 
-pub(crate) fn get_image_path_with_max_rating(conn: &Connection) -> Result<String> {
+pub(crate) fn _get_image_path_with_max_rating(conn: &Connection) -> Result<String> {
     conn.query_row(
         "SELECT image_path FROM images ORDER BY rating DESC LIMIT 1",
         params![],
@@ -187,7 +186,7 @@ pub(crate) fn set_loser_out(image_id: u64) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn calculate_percentiles(conn: &Connection) -> Result<HashMap<String, f64>> {
+pub(crate) fn _calculate_percentiles(conn: &Connection) -> Result<HashMap<String, f64>> {
     // retrieve all images
     let mut stmt = conn.prepare("SELECT image_path FROM images ORDER BY rating DESC")?;
     let images = stmt
@@ -217,14 +216,6 @@ fn get_total_number_of_participants(conn: &Connection) -> Result<u64> {
         conn.query_row("SELECT COUNT(*) FROM images", params![], |row| row.get(0))?;
 
     Ok(total_images)
-}
-
-fn get_rating(conn: &Connection, image_id: u64) -> Result<u32> {
-    conn.query_row(
-        "SELECT rating FROM images WHERE id = ?1",
-        params![image_id],
-        |row| row.get(0),
-    )
 }
 
 pub(crate) fn get_number_of_matches(conn: &Connection, round_number: u64) -> Result<u64> {

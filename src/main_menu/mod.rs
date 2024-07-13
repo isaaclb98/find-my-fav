@@ -1,12 +1,14 @@
 mod components;
-mod styles;
-mod systems;
+pub mod interactions;
+pub mod layout;
 
+use crate::main_menu::interactions::{
+    interact_with_folder_button, interact_with_resume_previous_button,
+};
+use crate::main_menu::layout::{despawn_main_menu, spawn_main_menu};
 use crate::AppState;
 use crate::AppState::MainMenu;
 use bevy::prelude::*;
-use systems::interactions::*;
-use systems::layout::*;
 
 pub struct MainMenuPlugin;
 

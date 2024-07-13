@@ -1,6 +1,6 @@
 use crate::main_menu::components::*;
-use crate::main_menu::styles::{BUTTON_STYLE, NORMAL_BUTTON_COLOR};
 use crate::styles::get_button_text_style;
+use crate::styles::{BUTTON_STYLE, NORMAL_BUTTON_COLOR};
 use bevy::prelude::*;
 use bevy::text::BreakLineOn;
 use bevy::window::PrimaryWindow;

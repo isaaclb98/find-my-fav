@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::speed_select::components::*;
-use crate::speed_select::styles::*;
+use crate::styles::*;
 
 pub fn spawn_speed_select(
     mut commands: Commands,

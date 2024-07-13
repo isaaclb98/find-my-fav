@@ -1,7 +1,7 @@
 use crate::file_system::open_folder;
 use crate::main_menu::components::{OpenFolderButton, ResumePreviousButton};
-use crate::main_menu::styles::{HOVERED_BUTTON_COLOR, NORMAL_BUTTON_COLOR};
 use crate::resources::ImageFolderPath;
+use crate::styles::{HOVERED_BUTTON_COLOR, NORMAL_BUTTON_COLOR};
 use crate::AppState;
 use bevy::prelude::{BackgroundColor, Changed, Interaction, NextState, Query, ResMut, With};
 
