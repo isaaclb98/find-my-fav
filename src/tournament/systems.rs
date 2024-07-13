@@ -58,7 +58,7 @@ pub fn generate_images_to_click(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     window_query: Query<&Window, With<PrimaryWindow>>,
-    participants_deque_resource: Res<ParticipantsDeque>,
+    mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut next_tournament_state: ResMut<NextState<TournamentState>>,
 ) {
     let start_time = Instant::now();
@@ -67,110 +67,160 @@ pub fn generate_images_to_click(
     let window_width = window.width();
     let window_height = window.height();
 
-    if let Some(image_id_1) = participants_deque_resource.deque.get(0) {
-        if let Some(image_id_2) = participants_deque_resource.deque.get(1) {
-            let image_path_1 = get_image_path_from_database(image_id_1)
-                .expect("Failed to get image path from database");
-            let image_path_2 = get_image_path_from_database(image_id_2)
-                .expect("Failed to get image path from database");
+    let image_ids: Option<(u64, u64)> = {
+        let deque = &participants_deque_resource.deque;
+        if let (Some(&image_id_1), Some(&image_id_2)) = (deque.get(0), deque.get(1)) {
+            Some((image_id_1, image_id_2))
+        } else {
+            None
+        }
+    };
 
-            // Load the image using the `image` crate
-            let image_1 = image::open(&image_path_1).expect("Failed to load image");
-            let image_2 = image::open(&image_path_2).expect("Failed to load image");
+    if let Some((image_id_1, image_id_2)) = image_ids {
+        let image_path_1 = get_image_path_from_database(&image_id_1)
+            .expect("Failed to get image path from database");
+        let image_path_2 = get_image_path_from_database(&image_id_2)
+            .expect("Failed to get image path from database");
 
-            let duration = start_time.elapsed();
-            println!("getting the images took {:?}", duration);
+        let mut error_occurred = false;
+        let image_1 = image::open(&image_path_1).unwrap_or_else(|_| {
+            let round_number = get_latest_round_number().expect("Failed to get round number");
 
-            // Get the image dimensions
-            let (width_1, height_1) = image_1.dimensions();
-            println!("Image 1 dimensions: {}x{}", width_1, height_1);
-            let (width_2, height_2) = image_2.dimensions();
-            println!("Image 2 dimensions: {}x{}", width_2, height_2);
+            participants_deque_resource
+                .deque
+                .remove(0)
+                .expect("Failed to remove from deque");
 
-            let image_aspect_ratio_1 = width_1 as f32 / height_1 as f32;
-            let image_aspect_ratio_2 = width_2 as f32 / height_2 as f32;
+            set_loser_out(image_id_1).expect("Failed to set loser");
+            insert_match_into_database(round_number, image_id_1, image_id_2, image_id_2)
+                .expect("Failed to insert match");
 
-            // Calculate the target width to be half of the window's width
-            let target_width = window_width / 2.0;
+            println!("Handled an error for an image. ID: {}", image_id_1);
 
-            // Calculate the target height to maintain the aspect ratio
-            let target_height_1 = target_width / image_aspect_ratio_1;
-            let target_height_2 = target_width / image_aspect_ratio_2;
+            error_occurred = true;
 
-            // If the target height is greater than the window height, adjust the target dimensions
-            let (final_width_1, final_height_1) = if target_height_1 > window_height {
-                let adjusted_height = window_height;
-                let adjusted_width = adjusted_height * image_aspect_ratio_1;
-                (adjusted_width, adjusted_height)
-            } else {
-                (target_width, target_height_1)
-            };
-            let (final_width_2, final_height_2) = if target_height_2 > window_height {
-                let adjusted_height = window_height;
-                let adjusted_width = adjusted_height * image_aspect_ratio_2;
-                (adjusted_width, adjusted_height)
-            } else {
-                (target_width, target_height_2)
-            };
+            Default::default()
+        });
 
-            // Load the image as a Bevy asset
-            let texture_handle_1: Handle<Image> = asset_server.load(image_path_1);
-            let texture_handle_2: Handle<Image> = asset_server.load(image_path_2);
+        if error_occurred {
+            return;
+        }
 
-            let start_time = Instant::now();
+        let image_2 = image::open(&image_path_2).unwrap_or_else(|_| {
+            let round_number = get_latest_round_number().expect("Failed to get round number");
 
-            commands
-                .spawn((
-                    NodeBundle {
+            participants_deque_resource
+                .deque
+                .remove(1)
+                .expect("Failed to remove from deque");
+
+            set_loser_out(image_id_2).expect("Failed to set loser");
+            insert_match_into_database(round_number, image_id_1, image_id_2, image_id_1)
+                .expect("Failed to insert match");
+
+            println!("Handled an error for an image. ID: {}", image_id_2);
+
+            error_occurred = true;
+
+            Default::default()
+        });
+
+        if error_occurred {
+            return;
+        }
+
+        let duration = start_time.elapsed();
+        println!("getting the images took {:?}", duration);
+
+        // Get the image dimensions
+        let (width_1, height_1) = image_1.dimensions();
+        println!("Image 1 dimensions: {}x{}", width_1, height_1);
+        let (width_2, height_2) = image_2.dimensions();
+        println!("Image 2 dimensions: {}x{}", width_2, height_2);
+
+        let image_aspect_ratio_1 = width_1 as f32 / height_1 as f32;
+        let image_aspect_ratio_2 = width_2 as f32 / height_2 as f32;
+
+        // Calculate the target width to be half of the window's width
+        let target_width = window_width / 2.0;
+
+        // Calculate the target height to maintain the aspect ratio
+        let target_height_1 = target_width / image_aspect_ratio_1;
+        let target_height_2 = target_width / image_aspect_ratio_2;
+
+        // If the target height is greater than the window height, adjust the target dimensions
+        let (final_width_1, final_height_1) = if target_height_1 > window_height {
+            let adjusted_height = window_height;
+            let adjusted_width = adjusted_height * image_aspect_ratio_1;
+            (adjusted_width, adjusted_height)
+        } else {
+            (target_width, target_height_1)
+        };
+        let (final_width_2, final_height_2) = if target_height_2 > window_height {
+            let adjusted_height = window_height;
+            let adjusted_width = adjusted_height * image_aspect_ratio_2;
+            (adjusted_width, adjusted_height)
+        } else {
+            (target_width, target_height_2)
+        };
+
+        // Load the image as a Bevy asset
+        let texture_handle_1: Handle<Image> = asset_server.load(image_path_1);
+        let texture_handle_2: Handle<Image> = asset_server.load(image_path_2);
+
+        let start_time = Instant::now();
+
+        commands
+            .spawn((
+                NodeBundle {
+                    style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                    ..default()
+                },
+                BothImageComponents,
+            ))
+            .with_children(|parent| {
+                parent
+                    .spawn(NodeBundle {
                         style: NODE_BUNDLE_EMPTY_ROW_STYLE,
                         ..default()
-                    },
-                    BothImageComponents,
-                ))
-                .with_children(|parent| {
-                    parent
-                        .spawn(NodeBundle {
-                            style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                            ..default()
-                        })
-                        .with_children(|parent| {
-                            // image 1
-                            parent.spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Px(final_width_1),
-                                        height: Val::Px(final_height_1),
-                                        ..Default::default()
-                                    },
-                                    image: UiImage::new(texture_handle_1),
-                                    ..default()
+                    })
+                    .with_children(|parent| {
+                        // image 1
+                        parent.spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Px(final_width_1),
+                                    height: Val::Px(final_height_1),
+                                    ..Default::default()
                                 },
-                                LeftImageComponent {},
-                            ));
-                        });
+                                image: UiImage::new(texture_handle_1),
+                                ..default()
+                            },
+                            LeftImageComponent {},
+                        ));
+                    });
 
-                    parent
-                        .spawn(NodeBundle {
-                            style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                            ..default()
-                        })
-                        .with_children(|parent| {
-                            // image 2
-                            parent.spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Px(final_width_2),
-                                        height: Val::Px(final_height_2),
-                                        ..Default::default()
-                                    },
-                                    image: UiImage::new(texture_handle_2),
-                                    ..default()
+                parent
+                    .spawn(NodeBundle {
+                        style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                        ..default()
+                    })
+                    .with_children(|parent| {
+                        // image 2
+                        parent.spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Px(final_width_2),
+                                    height: Val::Px(final_height_2),
+                                    ..Default::default()
                                 },
-                                RightImageComponent {},
-                            ));
-                        });
-                });
-        }
+                                image: UiImage::new(texture_handle_2),
+                                ..default()
+                            },
+                            RightImageComponent {},
+                        ));
+                    });
+            });
     }
 
     next_tournament_state.set(TournamentState::Deciding);
