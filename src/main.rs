@@ -6,8 +6,6 @@ use crate::resources::ImageFolderPath;
 use crate::speed_select::SpeedSelectPlugin;
 use crate::systems::*;
 use crate::tournament::TournamentPlugin;
-use crate::AppState::SpeedSelect;
-
 mod database;
 mod file_system;
 mod main_menu;
@@ -43,10 +41,6 @@ fn main() {
         .init_state::<AppState>()
         .init_resource::<ImageFolderPath>()
         .add_systems(Startup, spawn_camera)
-        .add_systems(
-            OnEnter(SpeedSelect),
-            initialize_database_if_image_folder_path,
-        )
         .add_systems(OnEnter(AppState::Finished), generate_finished_screen)
         .run();
 }

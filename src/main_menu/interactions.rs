@@ -1,5 +1,6 @@
 use crate::file_system::open_folder;
 use crate::main_menu::components::{OpenFolderButton, ResumePreviousButton};
+use crate::main_menu::systems::ResumedState;
 use crate::resources::ImageFolderPath;
 use crate::styles::{HOVERED_BUTTON_COLOR, NORMAL_BUTTON_COLOR};
 use crate::AppState;
@@ -47,11 +48,14 @@ pub fn interact_with_resume_previous_button(
         (Changed<Interaction>, With<ResumePreviousButton>),
     >,
     mut app_state_next_state: ResMut<NextState<AppState>>,
+    mut resumed_state_next_state: ResMut<NextState<ResumedState>>,
 ) {
     if let Ok((interaction, mut background_color)) = button_query.get_single_mut() {
         match *interaction {
             Interaction::Pressed => {
                 println!("Resume a previous tournament.");
+                resumed_state_next_state.set(ResumedState::Resumed);
+                app_state_next_state.set(AppState::SpeedSelect);
             }
             Interaction::Hovered => {
                 *background_color = BackgroundColor::from(HOVERED_BUTTON_COLOR);

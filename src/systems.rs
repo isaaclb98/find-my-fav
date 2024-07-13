@@ -1,5 +1,3 @@
-use crate::database::initialize_database;
-use crate::resources::ImageFolderPath;
 use crate::styles::{get_button_text_style, NODE_BUNDLE_EMPTY_COLUMN_STYLE};
 use crate::tournament::components::TournamentState;
 use bevy::prelude::*;
@@ -12,17 +10,6 @@ pub fn spawn_camera(mut commands: Commands, window_query: Query<&Window, With<Pr
         transform: Transform::from_xyz(window.width() / 2.0, window.height() / 2.0, 0.0),
         ..default()
     });
-}
-
-pub fn initialize_database_if_image_folder_path(image_folder_path: Res<ImageFolderPath>) {
-    if let Some(path) = &image_folder_path.image_folder_path {
-        initialize_database(path.clone())
-            .expect("Something went wrong when initializing the database.");
-    }
-}
-
-pub fn display_tournament_state(tournament_state: Res<State<TournamentState>>) {
-    // println!("{:?}", tournament_state);
 }
 
 pub fn generate_finished_screen(
