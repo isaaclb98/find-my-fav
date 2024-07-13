@@ -143,7 +143,7 @@ pub(crate) fn increment_rating(conn: &Connection, image_id: u64) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn get_image_path_from_database(id: u64) -> Result<PathBuf> {
+pub(crate) fn get_image_path_from_database(id: &u64) -> Result<PathBuf> {
     let db_path = get_database_path().expect("Error getting database path.");
 
     let conn = Connection::open(db_path).expect("Error opening connection");

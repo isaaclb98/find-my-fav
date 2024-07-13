@@ -2,11 +2,17 @@ use crate::database::{
     get_image_path_from_database, get_remaining_participants, initialize_database,
 };
 use crate::resources::ImageFolderPath;
+use crate::styles::{NODE_BUNDLE_EMPTY_COLUMN_STYLE, NODE_BUNDLE_EMPTY_ROW_STYLE};
+use bevy::gltf::GltfAssetLabel::Node;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use image::GenericImageView;
 use rand::prelude::SliceRandom;
 use rand::{random, thread_rng};
+use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
 
 pub fn spawn_camera(mut commands: Commands, window_query: Query<&Window, With<PrimaryWindow>>) {
     let window: &Window = window_query.get_single().unwrap();
@@ -24,14 +30,11 @@ pub fn initialize_database_if_image_folder_path(image_folder_path: Res<ImageFold
     }
 }
 
-pub fn check_if_tournament_in_progress() {}
-
 fn get_image(
     commands: &mut Commands,
     asset_server: &Res<AssetServer>,
     image_path: PathBuf,
     window_query: &Query<&Window, With<PrimaryWindow>>,
-    image_loaded_event_writer: &mut EventWriter<ImageLoadedEvent>,
 ) {
     let window: &Window = window_query.get_single().unwrap();
 
@@ -40,85 +43,21 @@ fn get_image(
 
     let handle = asset_server.load(image_path);
 
-    let entity = commands
-        .spawn(SpriteBundle {
-            texture: handle.clone(),
-            transform: Transform {
-                translation: Vec3::new(window_width / 2.0, window_height / 2.0, 0.0),
-                scale: Vec3::new(0.3, 0.3, 1.0),
-                ..Default::default()
-            },
-            ..default()
-        })
-        .id();
-
-    commands.spawn(AwaitingImageDimensions {
-        handle: handle.clone(),
+    commands.spawn(SpriteBundle {
+        texture: handle.clone(),
+        transform: Transform {
+            translation: Vec3::new(window_width / 2.0, window_height / 2.0, 0.0),
+            scale: Vec3::new(0.3, 0.3, 1.0),
+            ..Default::default()
+        },
+        ..default()
     });
-
-    image_loaded_event_writer.send(ImageLoadedEvent { entity, handle });
-}
-
-#[derive(Event)]
-pub struct ImageLoadedEvent {
-    entity: Entity,
-    handle: Handle<Image>,
-}
-
-#[derive(Component)]
-pub struct AwaitingImageDimensions {
-    pub handle: Handle<Image>,
-}
-pub fn check_image_loaded(
-    mut commands: Commands,
-    images: Res<Assets<Image>>,
-    query: Query<(Entity, &AwaitingImageDimensions)>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
-) {
-    for (entity, awaiting) in query.iter() {
-        let window: &Window = window_query.get_single().unwrap();
-
-        if let Some(image) = images.get(&awaiting.handle) {
-            let dimensions = image.texture_descriptor.size;
-            println!(
-                "Image dimensions: width = {}, height = {}",
-                dimensions.width, dimensions.height
-            );
-
-            let window_half_width = window.width() / 2.0;
-            let window_width = window.width();
-            let window_height = window.height();
-            let image_aspect_ratio = dimensions.width as f32 / dimensions.height as f32;
-
-            let scale_factor = if window_half_width / window_height > image_aspect_ratio {
-                window_height / dimensions.height as f32
-            } else {
-                window_half_width / dimensions.width as f32
-            };
-
-            let scaled_width = dimensions.width as f32 * scale_factor;
-            let scaled_height = dimensions.height as f32 * scale_factor;
-
-            let x_position = (window_half_width - scaled_width) / 2.0;
-            let y_position = (window_height - scaled_height) / 2.0;
-
-            commands
-                .entity(entity)
-                .insert(Transform {
-                    translation: Vec3::new(x_position, y_position, 0.0),
-                    scale: Vec3::new(scale_factor, scale_factor, 1.0),
-                    ..Default::default()
-                })
-                .remove::<AwaitingImageDimensions>();
-        }
-    }
 }
 
 pub fn get_two_participants(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     window_query: Query<&Window, With<PrimaryWindow>>,
-    mut image_loaded_event_writer: EventWriter<ImageLoadedEvent>,
 ) {
     let mut participants = get_remaining_participants().unwrap();
 
@@ -127,15 +66,165 @@ pub fn get_two_participants(
 
     for pair in participants.chunks(2) {
         if pair.len() == 2 {
-            let image_1 = get_image_path_from_database(pair[0]).expect("Er");
+            let image_1 = get_image_path_from_database(&pair[0]).expect("Er");
 
-            get_image(
-                &mut commands,
-                &asset_server,
-                image_1.clone(),
-                &window_query,
-                &mut image_loaded_event_writer,
-            );
+            get_image(&mut commands, &asset_server, image_1.clone(), &window_query);
+
+            thread::sleep(Duration::from_millis(100));
         }
     }
+}
+
+#[derive(Resource, Default)]
+pub struct ParticipantsDeque {
+    deque: VecDeque<u64>,
+}
+
+#[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
+pub enum TournamentState {
+    #[default]
+    Generating,
+    Displaying,
+    Deciding,
+}
+
+pub fn get_participants_for_round(
+    mut commands: Commands,
+    mut participants_deque_resource: ResMut<ParticipantsDeque>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    let mut participants = get_remaining_participants().unwrap();
+
+    let mut rng = thread_rng();
+    participants.shuffle(&mut rng);
+
+    for participant in participants {
+        participants_deque_resource.deque.push_back(participant);
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    next_tournament_state.set(TournamentState::Displaying);
+}
+
+#[derive(Component)]
+pub struct BothImageComponents;
+
+#[derive(Component)]
+pub struct LeftImageComponent;
+
+#[derive(Component)]
+pub struct RightImageComponent;
+
+pub fn generate_images_to_click(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    participants_deque_resource: Res<ParticipantsDeque>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    let window: &Window = window_query.get_single().unwrap();
+    let window_width = window.width();
+    let window_height = window.height();
+
+    let image_id_1 = participants_deque_resource
+        .deque
+        .get(0)
+        .expect("Nothing left to pop off of the deque.");
+    let image_id_2 = participants_deque_resource
+        .deque
+        .get(1)
+        .expect("Nothing left to pop off of the deque.");
+
+    let image_path_1 =
+        get_image_path_from_database(image_id_1).expect("Failed to get image path from database");
+    let image_path_2 =
+        get_image_path_from_database(image_id_2).expect("Failed to get image path from database");
+
+    // Load the image using the `image` crate
+    let image_1 = image::open(&image_path_1).expect("Failed to load image");
+    let image_2 = image::open(&image_path_2).expect("Failed to load image");
+
+    // Get the image dimensions
+    let (width_1, height_1) = image_1.dimensions();
+    println!("Image 1 dimensions: {}x{}", width_1, height_1);
+    let (width_2, height_2) = image_2.dimensions();
+    println!("Image 2 dimensions: {}x{}", width_2, height_2);
+
+    let image_aspect_ratio_1 = width_1 as f32 / height_1 as f32;
+    let image_aspect_ratio_2 = width_2 as f32 / height_2 as f32;
+
+    // Calculate the target width to be half of the window's width
+    let target_width = window_width / 2.0;
+
+    // Calculate the target height to maintain the aspect ratio
+    let target_height_1 = target_width / image_aspect_ratio_1;
+    let target_height_2 = target_width / image_aspect_ratio_2;
+
+    // If the target height is greater than the window height, adjust the target dimensions
+    let (final_width_1, final_height_1) = if target_height_1 > window_height {
+        let adjusted_height = window_height;
+        let adjusted_width = adjusted_height * image_aspect_ratio_1;
+        (adjusted_width, adjusted_height)
+    } else {
+        (target_width, target_height_1)
+    };
+    let (final_width_2, final_height_2) = if target_height_2 > window_height {
+        let adjusted_height = window_height;
+        let adjusted_width = adjusted_height * image_aspect_ratio_2;
+        (adjusted_width, adjusted_height)
+    } else {
+        (target_width, target_height_2)
+    };
+
+    // Load the image as a Bevy asset
+    let texture_handle_1: Handle<Image> = asset_server.load(image_path_1);
+    let texture_handle_2: Handle<Image> = asset_server.load(image_path_2);
+
+    commands
+        .spawn((
+            NodeBundle {
+                style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                ..default()
+            },
+            BothImageComponents,
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn(NodeBundle {
+                    style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // image 1
+                    parent.spawn(ImageBundle {
+                        style: Style {
+                            width: Val::Px(final_width_1),
+                            height: Val::Px(final_height_1),
+                            ..Default::default()
+                        },
+                        image: UiImage::new(texture_handle_1),
+                        ..default()
+                    });
+                });
+
+            parent
+                .spawn(NodeBundle {
+                    style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // image 2
+                    parent.spawn(ImageBundle {
+                        style: Style {
+                            width: Val::Px(final_width_2),
+                            height: Val::Px(final_height_2),
+                            ..Default::default()
+                        },
+                        image: UiImage::new(texture_handle_2),
+                        ..default()
+                    });
+                });
+        });
+
+    next_tournament_state.set(TournamentState::Deciding);
 }
