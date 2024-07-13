@@ -3,7 +3,7 @@ use bevy::prelude::*;
 
 #[derive(Event)]
 pub struct ImageClickedEvent {
-    left_image: bool,
+    pub(crate) left_image: bool,
 }
 
 pub fn interact_with_left_image_button(

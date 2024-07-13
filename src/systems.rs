@@ -1,6 +1,8 @@
 use crate::database::{
-    get_image_path_from_database, get_remaining_participants, initialize_database,
+    get_image_path_from_database, get_latest_round_number, get_remaining_participants,
+    increment_rating, initialize_database, insert_match_into_database, set_loser_out,
 };
+use crate::interactions::ImageClickedEvent;
 use crate::resources::ImageFolderPath;
 use crate::styles::{NODE_BUNDLE_EMPTY_COLUMN_STYLE, NODE_BUNDLE_EMPTY_ROW_STYLE};
 use bevy::gltf::GltfAssetLabel::Node;
@@ -54,7 +56,7 @@ fn get_image(
     });
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Debug)]
 pub struct ParticipantsDeque {
     deque: VecDeque<u64>,
 }
@@ -225,4 +227,52 @@ pub fn generate_images_to_click(
     println!("displaying the images took {:?}", duration);
 
     next_tournament_state.set(TournamentState::Deciding);
+}
+
+pub fn image_clicked_decision_logic(
+    mut commands: Commands,
+    mut image_clicked_event: EventReader<ImageClickedEvent>,
+    mut participants_deque_resource: ResMut<ParticipantsDeque>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+    both_image_components_query: Query<Entity, With<BothImageComponents>>,
+) {
+    for ev in image_clicked_event.read() {
+        println!("Before popping: {:?}", participants_deque_resource.deque);
+
+        let image_id_1 = participants_deque_resource
+            .deque
+            .pop_front()
+            .expect("Failed to pop");
+        let image_id_2 = participants_deque_resource
+            .deque
+            .pop_front()
+            .expect("Failed to pop");
+
+        println!("Popped IDs: {}, {}", image_id_1, image_id_2);
+        println!("After popping: {:?}", participants_deque_resource.deque);
+
+        let round_number = get_latest_round_number().expect("Failed to get round number");
+
+        if ev.left_image {
+            set_loser_out(image_id_2).expect("Failed to set loser");
+            increment_rating(image_id_1).expect("Failed to increment rating");
+            insert_match_into_database(round_number, image_id_1, image_id_2, image_id_1)
+                .expect("Failed to insert match");
+            println!("Set winner to leftie.");
+        } else {
+            set_loser_out(image_id_1).expect("Failed to set loser");
+            increment_rating(image_id_2).expect("Failed to increment rating");
+            insert_match_into_database(round_number, image_id_2, image_id_1, image_id_2)
+                .expect("Failed to insert match");
+            println!("Set winner to rightie.");
+        }
+
+        if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
+            commands
+                .entity(both_image_components_entity)
+                .despawn_recursive();
+        }
+
+        next_tournament_state.set(TournamentState::Displaying);
+    }
 }

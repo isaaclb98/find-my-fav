@@ -65,6 +65,7 @@ fn main() {
             (
                 interact_with_left_image_button,
                 interact_with_right_image_button,
+                image_clicked_decision_logic,
             )
                 .run_if(in_state(TournamentState::Deciding)),
         )

@@ -130,8 +130,17 @@ pub(crate) fn get_image_path_with_max_rating(conn: &Connection) -> Result<String
     )
 }
 
-pub(crate) fn increment_rating(conn: &Connection, image_id: u64) -> Result<()> {
-    let mut rating = get_rating(&conn, image_id)?;
+pub(crate) fn increment_rating(image_id: u64) -> Result<()> {
+    let db_path = get_database_path().expect("Error getting database path.");
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
+    let mut rating: i32 = conn
+        .query_row(
+            "SELECT rating FROM images WHERE id = ?1",
+            params![image_id],
+            |row| row.get(0),
+        )
+        .expect("Failed to get rating");
 
     rating += 1;
 
@@ -165,7 +174,11 @@ pub(crate) fn _get_tournament_finished(conn: &Connection, round_number: u64) -> 
     )
 }
 
-pub(crate) fn set_loser_out(conn: &Connection, image_id: u64) -> Result<()> {
+pub(crate) fn set_loser_out(image_id: u64) -> Result<()> {
+    let db_path = get_database_path().expect("Error getting database path.");
+
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
     conn.execute(
         "UPDATE images SET out = ?1 WHERE id = ?2",
         params![1, image_id],
@@ -243,12 +256,14 @@ pub(crate) fn get_total_number_of_matches_until_now(
 }
 
 pub(crate) fn insert_match_into_database(
-    conn: &Connection,
     round_number: u64,
     participant1: u64,
     participant2: u64,
     winner: u64,
 ) -> Result<()> {
+    let db_path = get_database_path().expect("Error getting database path.");
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
     conn.execute(
         "INSERT INTO matches (round_number, participant1_id, participant2_id, winner_id)
                          VALUES (?1, ?2, ?3, ?4)",
