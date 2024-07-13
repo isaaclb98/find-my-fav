@@ -19,6 +19,7 @@ use bevy::window::PrimaryWindow;
 use image::GenericImageView;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub fn get_participants_for_round(
@@ -54,6 +55,15 @@ pub fn get_participants_for_round(
     next_tournament_state.set(TournamentState::Displaying);
 }
 
+fn sanitize_filename(path: &Path) -> PathBuf {
+    let sanitized: String = path
+        .to_string_lossy()
+        .chars()
+        .filter(|c| c.is_ascii())
+        .collect();
+    PathBuf::from(sanitized)
+}
+
 pub fn generate_images_to_click(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -81,6 +91,9 @@ pub fn generate_images_to_click(
             .expect("Failed to get image path from database");
         let image_path_2 = get_image_path_from_database(&image_id_2)
             .expect("Failed to get image path from database");
+
+        let image_path_1 = sanitize_filename(&image_path_1);
+        let image_path_2 = sanitize_filename(&image_path_2);
 
         let mut error_occurred = false;
         let image_1 = image::open(&image_path_1).unwrap_or_else(|_| {
