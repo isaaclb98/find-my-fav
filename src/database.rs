@@ -153,7 +153,6 @@ pub(crate) fn increment_rating(image_id: u64) -> Result<()> {
 
 pub(crate) fn get_image_path_from_database(id: &u64) -> Result<PathBuf> {
     let db_path = get_database_path().expect("Error getting database path.");
-
     let conn = Connection::open(db_path).expect("Error opening connection");
 
     let query = "SELECT image_path FROM images WHERE id = ?1".to_string();
@@ -175,7 +174,6 @@ pub(crate) fn _get_tournament_finished(conn: &Connection, round_number: u64) -> 
 
 pub(crate) fn set_loser_out(image_id: u64) -> Result<()> {
     let db_path = get_database_path().expect("Error getting database path.");
-
     let conn = Connection::open(db_path).expect("Error opening connection");
 
     conn.execute(
@@ -186,7 +184,10 @@ pub(crate) fn set_loser_out(image_id: u64) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn _calculate_percentiles(conn: &Connection) -> Result<HashMap<String, f64>> {
+pub(crate) fn calculate_percentiles() -> Result<HashMap<String, f64>> {
+    let db_path = get_database_path().expect("Error getting database path.");
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
     // retrieve all images
     let mut stmt = conn.prepare("SELECT image_path FROM images ORDER BY rating DESC")?;
     let images = stmt

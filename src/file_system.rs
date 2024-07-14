@@ -56,12 +56,8 @@ pub fn copy_images_to_directory(
                         // create a new file name
                         // append its percentile to one decimal as prefix
                         // and use its original extension
-                        let new_file_name = format!(
-                            "{:05.1}_{}.{}",
-                            percentile,
-                            file_name.to_string_lossy(),
-                            extension.to_string_lossy()
-                        );
+                        let new_file_name =
+                            format!("{:05.1}_{}", percentile, file_name.to_string_lossy());
 
                         let destination_path = Path::new(new_directory).join(new_file_name);
 
