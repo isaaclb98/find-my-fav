@@ -1,10 +1,11 @@
 use crate::file_system::open_folder;
 use crate::finished::components::*;
+use crate::finished::systems::open_new_folder;
 use crate::main_menu::systems::*;
 use crate::resources::ImageFolderPath;
 use crate::styles::*;
 use crate::AppState;
-use bevy::prelude::{BackgroundColor, Changed, Interaction, NextState, Query, ResMut, With};
+use bevy::prelude::{BackgroundColor, Changed, Interaction, NextState, Query, Res, ResMut, With};
 
 pub fn interact_with_new_folder_button(
     mut button_query: Query<
@@ -13,10 +14,12 @@ pub fn interact_with_new_folder_button(
     >,
     mut app_state_next_state: ResMut<NextState<AppState>>,
     mut image_folder_path_resource: ResMut<ImageFolderPath>,
+    favourites_folder_resource: Res<FavouritesFolderResource>,
 ) {
     if let Ok((interaction, mut background_color)) = button_query.get_single_mut() {
         match *interaction {
             Interaction::Pressed => {
+                open_new_folder(&favourites_folder_resource);
                 *background_color = BackgroundColor::from(NORMAL_BUTTON_COLOR);
             }
             Interaction::Hovered => {
