@@ -1,7 +1,7 @@
 mod components;
 pub mod interactions;
 pub mod layout;
-mod systems;
+pub mod systems;
 
 use crate::main_menu::interactions::{
     interact_with_folder_button, interact_with_resume_previous_button,

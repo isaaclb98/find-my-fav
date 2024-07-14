@@ -56,11 +56,17 @@ pub fn get_participants_for_round(
 }
 
 fn sanitize_filename(path: &Path) -> PathBuf {
+    let start_time = Instant::now();
+
     let sanitized: String = path
         .to_string_lossy()
         .chars()
         .filter(|c| c.is_ascii())
         .collect();
+
+    let duration = start_time.elapsed();
+    println!("sanitizing the image paths took {:?}", duration);
+
     PathBuf::from(sanitized)
 }
 

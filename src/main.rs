@@ -1,13 +1,14 @@
-use bevy::prelude::*;
-use bevy::window::{WindowMode, WindowTheme};
-
+use crate::finished::FinishedPlugin;
 use crate::main_menu::MainMenuPlugin;
 use crate::resources::ImageFolderPath;
 use crate::speed_select::SpeedSelectPlugin;
 use crate::systems::*;
 use crate::tournament::TournamentPlugin;
+use bevy::prelude::*;
+use bevy::window::{WindowMode, WindowTheme};
 mod database;
 mod file_system;
+mod finished;
 mod main_menu;
 mod resources;
 mod speed_select;
@@ -38,9 +39,10 @@ fn main() {
         .add_plugins(MainMenuPlugin)
         .add_plugins(SpeedSelectPlugin)
         .add_plugins(TournamentPlugin)
+        .add_plugins(FinishedPlugin)
         .init_state::<AppState>()
         .init_resource::<ImageFolderPath>()
         .add_systems(Startup, spawn_camera)
-        .add_systems(OnEnter(AppState::Finished), generate_finished_screen)
+        .add_systems(Update, show_app_state)
         .run();
 }
