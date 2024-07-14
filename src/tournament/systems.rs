@@ -10,6 +10,7 @@ use crate::tournament::components::{
 use crate::tournament::interactions::ImageClickedEvent;
 use crate::AppState;
 use bevy::asset::{AssetServer, Handle};
+use bevy::color::Color;
 use bevy::hierarchy::{BuildChildren, DespawnRecursiveExt};
 use bevy::prelude::{
     default, ButtonBundle, Commands, Entity, EventReader, Image, NextState, NodeBundle, Query, Res,
@@ -272,7 +273,7 @@ pub fn image_clicked_decision_logic(
     }
 
     for ev in image_clicked_event.read() {
-        println!("Before popping: {:?}", participants_deque_resource.deque);
+        // println!("Before popping: {:?}", participants_deque_resource.deque);
 
         let image_id_1 = participants_deque_resource
             .deque
@@ -283,8 +284,8 @@ pub fn image_clicked_decision_logic(
             .pop_front()
             .expect("Failed to pop");
 
-        println!("Popped IDs: {}, {}", image_id_1, image_id_2);
-        println!("After popping: {:?}", participants_deque_resource.deque);
+        // println!("Popped IDs: {}, {}", image_id_1, image_id_2);
+        // println!("After popping: {:?}", participants_deque_resource.deque);
 
         let round_number = get_latest_round_number().expect("Failed to get round number");
 

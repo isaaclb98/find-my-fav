@@ -3,14 +3,6 @@ use crate::styles::*;
 use crate::AppState;
 use bevy::prelude::*;
 
-#[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
-pub enum SpeedState {
-    Slow,
-    #[default]
-    Normal,
-    Fast,
-}
-
 pub fn interact_with_begin_button(
     mut button_query: Query<
         (&Interaction, &mut BackgroundColor),

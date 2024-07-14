@@ -1,4 +1,4 @@
-use bevy::prelude::Component;
+use bevy::prelude::{Component, States};
 
 #[derive(Component)]
 pub struct SpeedSelectComponent;
@@ -14,3 +14,11 @@ pub struct NormalButton;
 
 #[derive(Component)]
 pub struct FastButton;
+
+#[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
+pub enum SpeedState {
+    Slow,
+    #[default]
+    Normal,
+    Fast,
+}

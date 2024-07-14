@@ -3,6 +3,7 @@ use crate::speed_select::layout::*;
 use crate::AppState;
 use bevy::app::{App, Plugin, Update};
 use bevy::prelude::*;
+use components::SpeedState;
 
 mod components;
 pub mod interactions;
