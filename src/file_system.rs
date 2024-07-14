@@ -11,7 +11,7 @@ fn get_user_home_directory() -> PathBuf {
     dirs::home_dir().expect("Could not find the home directory")
 }
 
-pub fn create_image_directory() -> PathBuf {
+pub fn create_image_directory(original_folder_name: &str) -> PathBuf {
     // get users home directory. platform-agnostic.
     let home = get_user_home_directory();
 
@@ -24,14 +24,15 @@ pub fn create_image_directory() -> PathBuf {
     let seconds = since_epoch.as_secs();
 
     // retrieve the last eight digits.
-    let date = format!("{}", seconds);
-    let last_eight_digits = &date[date.len() - 8..];
+    let seconds = format!("{}", seconds);
+    let last_four_digits = &seconds[seconds.len() - 4..];
 
-    // e.g. favourites-43253123
-    // could improve this later but for now I just wanted a somewhat unique directory name
     home.join("Pictures")
-        .join(format!("favourites"))
-        .join(format!("{}-{}", current_date, last_eight_digits))
+        .join("Favourites".to_string())
+        .join(format!(
+            "{}-{}-{}",
+            original_folder_name, current_date, last_four_digits
+        ))
 }
 
 pub fn copy_images_to_directory(
