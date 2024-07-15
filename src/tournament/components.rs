@@ -49,10 +49,7 @@ pub struct TransitionToFinishedEvent;
 pub struct DespawnImagesEvent;
 
 #[derive(Event)]
-pub struct TwoImagesLoadedEvent {
-    pub image_handle_1: Handle<Image>,
-    pub image_handle_2: Handle<Image>,
-}
+pub struct TwoImagesLoadedEvent;
 
 #[derive(Event)]
 pub struct PopTwoHandlesEvent;
@@ -61,3 +58,11 @@ pub struct PopTwoHandlesEvent;
 pub struct ImageClickedEvent {
     pub left_image: bool,
 }
+
+#[derive(Event)]
+pub struct ImageErrorEvent {
+    pub left_image_fail: bool,
+}
+
+#[derive(Event)]
+pub struct NewRoundNeeded;

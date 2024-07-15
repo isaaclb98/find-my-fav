@@ -23,6 +23,8 @@ impl Plugin for TournamentPlugin {
             .add_event::<TwoImagesLoadedEvent>()
             .add_event::<PopTwoHandlesEvent>()
             .add_event::<ImageClickedEvent>()
+            .add_event::<ImageErrorEvent>()
+            .add_event::<NewRoundNeeded>()
             .init_state::<TournamentState>()
             .init_resource::<ParticipantsDeque>()
             .init_resource::<ParticipantsToLoadDeque>()
@@ -35,12 +37,13 @@ impl Plugin for TournamentPlugin {
             .add_systems(
                 Update,
                 (check_if_two_images_are_loaded, load_images)
+                    .after(image_error_event_listener)
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Loading)),
             )
             .add_systems(
                 Update,
-                display_two_loaded_images
+                (display_two_loaded_images, load_images)
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Displaying)),
             )
@@ -63,7 +66,8 @@ impl Plugin for TournamentPlugin {
                     transition_to_deciding_event_listener,
                     transition_to_finished_event_listener,
                     despawn_images_event_listener,
-                    pop_two_handles_event_listener,
+                    image_error_event_listener,
+                    new_round_needed_event_listener,
                 )
                     .run_if(in_state(AppState::Tournament)),
             );
