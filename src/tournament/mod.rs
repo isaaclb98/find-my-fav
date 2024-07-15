@@ -1,13 +1,10 @@
-use crate::tournament::components::{ParticipantsDeque, TournamentState};
-use crate::tournament::interactions::{
-    interact_with_left_image_button, interact_with_right_image_button, ImageClickedEvent,
-};
-use crate::tournament::systems::{
-    generate_images_to_click, get_participants_for_round, image_clicked_decision_logic,
-};
+use crate::tournament::components::*;
+use crate::tournament::interactions::*;
+use crate::tournament::systems::*;
 use crate::AppState;
 
 use bevy::prelude::*;
+use components::ImageClickedEvent;
 
 pub mod components;
 pub mod interactions;
@@ -17,9 +14,18 @@ pub struct TournamentPlugin;
 
 impl Plugin for TournamentPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<ImageClickedEvent>()
+        app.add_event::<TransitionToGeneratingEvent>()
+            .add_event::<TransitionToLoadingEvent>()
+            .add_event::<TransitionToDisplayingEvent>()
+            .add_event::<TransitionToDecidingEvent>()
+            .add_event::<TransitionToFinishedEvent>()
+            .add_event::<DespawnImagesEvent>()
+            .add_event::<TwoImagesLoadedEvent>()
+            .add_event::<PopTwoHandlesEvent>()
+            .add_event::<ImageClickedEvent>()
             .init_state::<TournamentState>()
             .init_resource::<ParticipantsDeque>()
+            .init_resource::<ParticipantsToLoadDeque>()
             .add_systems(
                 Update,
                 get_participants_for_round
@@ -28,7 +34,13 @@ impl Plugin for TournamentPlugin {
             )
             .add_systems(
                 Update,
-                generate_images_to_click
+                (check_if_two_images_are_loaded, load_images)
+                    .run_if(in_state(AppState::Tournament))
+                    .run_if(in_state(TournamentState::Loading)),
+            )
+            .add_systems(
+                Update,
+                display_two_loaded_images
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Displaying)),
             )
@@ -41,6 +53,19 @@ impl Plugin for TournamentPlugin {
                 )
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Deciding)),
+            )
+            .add_systems(
+                Update,
+                (
+                    transition_to_generating_event_listener,
+                    transition_to_loading_event_listener,
+                    transition_to_displaying_event_listener,
+                    transition_to_deciding_event_listener,
+                    transition_to_finished_event_listener,
+                    despawn_images_event_listener,
+                    pop_two_handles_event_listener,
+                )
+                    .run_if(in_state(AppState::Tournament)),
             );
     }
 }

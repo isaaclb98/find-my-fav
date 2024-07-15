@@ -1,46 +1,31 @@
-use crate::database::{
-    get_image_path_from_database, get_latest_round_number, get_remaining_participants,
-    increment_rating, insert_match_into_database, set_loser_out,
-};
+use crate::database::*;
 use crate::styles::NODE_BUNDLE_EMPTY_ROW_STYLE;
-use crate::tournament::components::{
-    BothImageComponents, LeftImageComponent, ParticipantsDeque, RightImageComponent,
-    TournamentState,
-};
-use crate::tournament::interactions::ImageClickedEvent;
+use crate::tournament::components::*;
 use crate::AppState;
-use bevy::asset::{AssetServer, Handle};
-use bevy::color::Color;
-use bevy::hierarchy::{BuildChildren, DespawnRecursiveExt};
-use bevy::prelude::{
-    default, ButtonBundle, Commands, Entity, EventReader, Image, NextState, NodeBundle, Query, Res,
-    ResMut, Style, UiImage, Val, Window, With,
-};
+use bevy::asset::LoadState;
+use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use image::GenericImageView;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
-use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+// Will run in Generating
+/// Get the participants ids for a given round from the database
 pub fn get_participants_for_round(
-    mut commands: Commands,
+    mut ev_loading: EventWriter<TransitionToLoadingEvent>,
+    mut ev_finished: EventWriter<TransitionToFinishedEvent>,
+    mut ev_despawn: EventWriter<DespawnImagesEvent>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
-    mut next_tournament_state: ResMut<NextState<TournamentState>>,
-    mut next_app_state: ResMut<NextState<AppState>>,
-    both_image_components_query: Query<Entity, With<BothImageComponents>>,
+    mut participants_to_load_resource: ResMut<ParticipantsToLoadDeque>,
 ) {
-    let start_time = Instant::now();
-
     let mut participants = get_remaining_participants().unwrap();
 
+    // Tournament over
     if participants.len() == 1 {
-        if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
-            commands
-                .entity(both_image_components_entity)
-                .despawn_recursive();
-        }
-        next_app_state.set(AppState::Finished);
+        println!("The tournament is now over.");
+
+        ev_despawn.send(DespawnImagesEvent);
+        ev_finished.send(TransitionToFinishedEvent);
         return;
     }
 
@@ -48,246 +33,223 @@ pub fn get_participants_for_round(
     participants.shuffle(&mut rng);
 
     for participant in participants {
-        participants_deque_resource.deque.push_back(participant);
+        participants_deque_resource
+            .participants_deque
+            .push_back(participant);
+        participants_to_load_resource
+            .participants_to_load_deque
+            .push_back(participant);
     }
 
-    let duration = start_time.elapsed();
-    println!("get_participants_for_round took {:?}", duration);
-    next_tournament_state.set(TournamentState::Displaying);
+    ev_loading.send(TransitionToLoadingEvent);
 }
 
-fn sanitize_filename(path: &Path) -> PathBuf {
-    let start_time = Instant::now();
-
-    let sanitized: String = path
-        .to_string_lossy()
-        .chars()
-        .filter(|c| c.is_ascii())
-        .collect();
-
-    let duration = start_time.elapsed();
-    println!("sanitizing the image paths took {:?}", duration);
-
-    PathBuf::from(sanitized)
-}
-
-pub fn generate_images_to_click(
-    mut commands: Commands,
+// Will run in Loading and possibly Deciding
+/// Loads one image at a time
+pub fn load_images(
     asset_server: Res<AssetServer>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
+    mut participants_to_load_resource: ResMut<ParticipantsToLoadDeque>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
-    mut next_tournament_state: ResMut<NextState<TournamentState>>,
 ) {
-    let start_time = Instant::now();
-
-    let window: &Window = window_query.get_single().unwrap();
-    let window_width = window.width();
-    let window_height = window.height();
-
-    let image_ids: Option<(u64, u64)> = {
-        let deque = &participants_deque_resource.deque;
-        if let (Some(&image_id_1), Some(&image_id_2)) = (deque.get(0), deque.get(1)) {
-            Some((image_id_1, image_id_2))
+    let image_id_option: Option<u64> = {
+        if let Some(image_id_1) = participants_to_load_resource
+            .participants_to_load_deque
+            .pop_front()
+        {
+            Some(image_id_1)
         } else {
             None
         }
     };
 
-    if let Some((image_id_1, image_id_2)) = image_ids {
-        let image_path_1 = get_image_path_from_database(&image_id_1)
-            .expect("Failed to get image path from database");
-        let image_path_2 = get_image_path_from_database(&image_id_2)
-            .expect("Failed to get image path from database");
+    if let Some(image_id) = image_id_option {
+        let image_path = get_image_path_from_database(image_id)
+            .expect("Could not load the image path from the database.");
 
-        let image_path_1 = sanitize_filename(&image_path_1);
-        let image_path_2 = sanitize_filename(&image_path_2);
+        let image_handle: Handle<Image> = asset_server.load(image_path);
 
-        let mut error_occurred = false;
-        let image_1 = image::open(&image_path_1).unwrap_or_else(|_| {
-            let round_number = get_latest_round_number().expect("Failed to get round number");
-
-            participants_deque_resource
-                .deque
-                .remove(0)
-                .expect("Failed to remove from deque");
-
-            set_loser_out(image_id_1).expect("Failed to set loser");
-            insert_match_into_database(round_number, image_id_1, image_id_2, image_id_2)
-                .expect("Failed to insert match");
-
-            println!("Handled an error for an image. ID: {}", image_id_1);
-
-            error_occurred = true;
-
-            Default::default()
-        });
-
-        if error_occurred {
-            return;
-        }
-
-        let image_2 = image::open(&image_path_2).unwrap_or_else(|_| {
-            let round_number = get_latest_round_number().expect("Failed to get round number");
-
-            participants_deque_resource
-                .deque
-                .remove(1)
-                .expect("Failed to remove from deque");
-
-            set_loser_out(image_id_2).expect("Failed to set loser");
-            insert_match_into_database(round_number, image_id_1, image_id_2, image_id_1)
-                .expect("Failed to insert match");
-
-            println!("Handled an error for an image. ID: {}", image_id_2);
-
-            error_occurred = true;
-
-            Default::default()
-        });
-
-        if error_occurred {
-            return;
-        }
-
-        let duration = start_time.elapsed();
-        println!("getting the images took {:?}", duration);
-
-        // Get the image dimensions
-        let (width_1, height_1) = image_1.dimensions();
-        println!("Image 1 dimensions: {}x{}", width_1, height_1);
-        let (width_2, height_2) = image_2.dimensions();
-        println!("Image 2 dimensions: {}x{}", width_2, height_2);
-
-        let image_aspect_ratio_1 = width_1 as f32 / height_1 as f32;
-        let image_aspect_ratio_2 = width_2 as f32 / height_2 as f32;
-
-        // Calculate the target width to be half of the window's width
-        let target_width = window_width / 2.0;
-
-        // Calculate the target height to maintain the aspect ratio
-        let target_height_1 = target_width / image_aspect_ratio_1;
-        let target_height_2 = target_width / image_aspect_ratio_2;
-
-        // If the target height is greater than the window height, adjust the target dimensions
-        let (final_width_1, final_height_1) = if target_height_1 > window_height {
-            let adjusted_height = window_height;
-            let adjusted_width = adjusted_height * image_aspect_ratio_1;
-            (adjusted_width, adjusted_height)
-        } else {
-            (target_width, target_height_1)
-        };
-        let (final_width_2, final_height_2) = if target_height_2 > window_height {
-            let adjusted_height = window_height;
-            let adjusted_width = adjusted_height * image_aspect_ratio_2;
-            (adjusted_width, adjusted_height)
-        } else {
-            (target_width, target_height_2)
-        };
-
-        // Load the image as a Bevy asset
-        let texture_handle_1: Handle<Image> = asset_server.load(image_path_1);
-        let texture_handle_2: Handle<Image> = asset_server.load(image_path_2);
-
-        let start_time = Instant::now();
-
-        commands
-            .spawn((
-                NodeBundle {
-                    style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                    ..default()
-                },
-                BothImageComponents,
-            ))
-            .with_children(|parent| {
-                parent
-                    .spawn(NodeBundle {
-                        style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                        ..default()
-                    })
-                    .with_children(|parent| {
-                        // image 1
-                        parent.spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Px(final_width_1),
-                                    height: Val::Px(final_height_1),
-                                    ..Default::default()
-                                },
-                                image: UiImage::new(texture_handle_1),
-                                ..default()
-                            },
-                            LeftImageComponent {},
-                        ));
-                    });
-
-                parent
-                    .spawn(NodeBundle {
-                        style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                        ..default()
-                    })
-                    .with_children(|parent| {
-                        // image 2
-                        parent.spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Px(final_width_2),
-                                    height: Val::Px(final_height_2),
-                                    ..Default::default()
-                                },
-                                image: UiImage::new(texture_handle_2),
-                                ..default()
-                            },
-                            RightImageComponent {},
-                        ));
-                    });
-            });
+        participants_deque_resource
+            .handles_deque
+            .push_back(image_handle);
+    } else {
     }
-
-    next_tournament_state.set(TournamentState::Deciding);
 }
 
-pub fn image_clicked_decision_logic(
-    mut commands: Commands,
-    mut image_clicked_event: EventReader<ImageClickedEvent>,
+// Will run in Loading
+/// Will check if two images at the front of the deque are loaded yet. Hardcoded to be two, which sucks.
+pub fn check_if_two_images_are_loaded(
+    mut ev_loaded_images: EventWriter<TwoImagesLoadedEvent>,
+    mut ev_pop_two_handles: EventWriter<PopTwoHandlesEvent>,
+    mut ev_displaying: EventWriter<TransitionToDisplayingEvent>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
-    mut next_tournament_state: ResMut<NextState<TournamentState>>,
-    both_image_components_query: Query<Entity, With<BothImageComponents>>,
+    asset_server: Res<AssetServer>,
 ) {
-    if let None = participants_deque_resource.deque.get(1) {
-        let mut round_number = get_latest_round_number().expect("Failed to get round number");
+    // println!(
+    //     "handles_deque: {:?}",
+    //     participants_deque_resource.handles_deque
+    // );
 
-        if let Some(sole_image) = participants_deque_resource.deque.pop_front() {
-            insert_match_into_database(round_number, sole_image, 0.0 as u64, sole_image)
-                .expect("Failed to insert match");
+    if let (Some(image_handle_1), Some(image_handle_2)) = (
+        participants_deque_resource.handles_deque.get(0),
+        participants_deque_resource.handles_deque.get(1),
+    ) {
+        // println!(
+        //     "check_if_two_images_are_loaded: \nimage_handle_1: {:?}\nimage_handle_2{:?}",
+        //     image_handle_1, image_handle_2
+        // );
+        if let (Some(LoadState::Loaded), Some(LoadState::Loaded)) = (
+            asset_server.get_load_state(image_handle_1),
+            asset_server.get_load_state(image_handle_2),
+        ) {
+            ev_loaded_images.send(TwoImagesLoadedEvent {
+                image_handle_1: image_handle_1.clone(),
+                image_handle_2: image_handle_2.clone(),
+            });
+            ev_pop_two_handles.send(PopTwoHandlesEvent);
+            ev_displaying.send(TransitionToDisplayingEvent);
+        }
+    }
+}
+
+// Will run in Displaying
+/// Display the two images that have been loaded
+pub fn display_two_loaded_images(
+    mut commands: Commands,
+    mut ev_loaded_images: EventReader<TwoImagesLoadedEvent>,
+    mut ev_deciding: EventWriter<TransitionToDecidingEvent>,
+    images: Res<Assets<Image>>,
+    both_image_components_query: Query<Entity, With<BothImageComponents>>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+) {
+    for ev in ev_loaded_images.read() {
+        println!("{:?}\n{:?}", ev.image_handle_1, ev.image_handle_2);
+
+        // despawn the preexisting images if they exist
+        if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
+            commands
+                .entity(both_image_components_entity)
+                .despawn_recursive();
         }
 
-        println!("None left");
+        if let (Some(image_1), Some(image_2)) = (
+            images.get(&ev.image_handle_1),
+            images.get(&ev.image_handle_2),
+        ) {
+            let size_1 = image_1.size();
+            let size_2 = image_2.size();
 
-        round_number += 1;
-        insert_match_into_database(round_number, 0.0 as u64, 0.0 as u64, 0.0 as u64)
-            .expect("Failed to insert match");
+            let width_1 = size_1.x as f32;
+            let height_1 = size_1.y as f32;
+            let width_2 = size_2.x as f32;
+            let height_2 = size_2.y as f32;
 
-        next_tournament_state.set(TournamentState::Generating);
+            let image_aspect_ratio_1 = width_1 / height_1;
+            let image_aspect_ratio_2 = width_2 / height_2;
 
-        return;
+            let window: &Window = window_query.get_single().unwrap();
+            let window_width = window.width();
+            let window_height = window.height();
+
+            // Calculate the target width to be half of the window's width
+            let target_width = window_width / 2.0;
+
+            // Calculate the target height to maintain the aspect ratio
+            let target_height_1 = target_width / image_aspect_ratio_1;
+            let target_height_2 = target_width / image_aspect_ratio_2;
+
+            // If the target height is greater than the window height, adjust the target dimensions
+            let (final_width_1, final_height_1) = if target_height_1 > window_height {
+                let adjusted_height = window_height;
+                let adjusted_width = adjusted_height * image_aspect_ratio_1;
+                (adjusted_width, adjusted_height)
+            } else {
+                (target_width, target_height_1)
+            };
+            let (final_width_2, final_height_2) = if target_height_2 > window_height {
+                let adjusted_height = window_height;
+                let adjusted_width = adjusted_height * image_aspect_ratio_2;
+                (adjusted_width, adjusted_height)
+            } else {
+                (target_width, target_height_2)
+            };
+
+            commands
+                .spawn((
+                    NodeBundle {
+                        style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                        ..default()
+                    },
+                    BothImageComponents,
+                ))
+                .with_children(|parent| {
+                    parent
+                        .spawn(NodeBundle {
+                            style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                            ..default()
+                        })
+                        .with_children(|parent| {
+                            // image 1
+                            parent.spawn((
+                                ButtonBundle {
+                                    style: Style {
+                                        width: Val::Px(final_width_1),
+                                        height: Val::Px(final_height_1),
+                                        ..Default::default()
+                                    },
+                                    image: UiImage::new(ev.image_handle_1.clone()),
+                                    ..default()
+                                },
+                                LeftImageComponent {},
+                            ));
+                        });
+
+                    parent
+                        .spawn(NodeBundle {
+                            style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                            ..default()
+                        })
+                        .with_children(|parent| {
+                            // image 2
+                            parent.spawn((
+                                ButtonBundle {
+                                    style: Style {
+                                        width: Val::Px(final_width_2),
+                                        height: Val::Px(final_height_2),
+                                        ..Default::default()
+                                    },
+                                    image: UiImage::new(ev.image_handle_2.clone()),
+                                    ..default()
+                                },
+                                RightImageComponent {},
+                            ));
+                        });
+                });
+
+            ev_deciding.send(TransitionToDecidingEvent);
+            break;
+        }
+        println!("Error in Display: display_two_loaded_images.");
     }
+}
 
-    for ev in image_clicked_event.read() {
-        // println!("Before popping: {:?}", participants_deque_resource.deque);
-
+// Will run in Deciding
+pub fn image_clicked_decision_logic(
+    mut ev_image_clicked: EventReader<ImageClickedEvent>,
+    mut ev_generating: EventWriter<TransitionToGeneratingEvent>,
+    mut ev_loading: EventWriter<TransitionToLoadingEvent>,
+    mut participants_deque_resource: ResMut<ParticipantsDeque>,
+) {
+    for ev in ev_image_clicked.read() {
         let image_id_1 = participants_deque_resource
-            .deque
+            .participants_deque
             .pop_front()
             .expect("Failed to pop");
         let image_id_2 = participants_deque_resource
-            .deque
+            .participants_deque
             .pop_front()
             .expect("Failed to pop");
 
-        // println!("Popped IDs: {}, {}", image_id_1, image_id_2);
-        // println!("After popping: {:?}", participants_deque_resource.deque);
-
-        let round_number = get_latest_round_number().expect("Failed to get round number");
+        let mut round_number = get_latest_round_number().expect("Failed to get round number");
 
         if ev.left_image {
             set_loser_out(image_id_2).expect("Failed to set loser");
@@ -295,20 +257,111 @@ pub fn image_clicked_decision_logic(
             insert_match_into_database(round_number, image_id_1, image_id_2, image_id_1)
                 .expect("Failed to insert match");
             println!("Set winner to leftie.");
+            ev_loading.send(TransitionToLoadingEvent);
         } else {
             set_loser_out(image_id_1).expect("Failed to set loser");
             increment_rating(image_id_2).expect("Failed to increment rating");
             insert_match_into_database(round_number, image_id_2, image_id_1, image_id_2)
                 .expect("Failed to insert match");
             println!("Set winner to rightie.");
+            ev_loading.send(TransitionToLoadingEvent);
         }
+        // check if 1 or 0 left in queue afterwards
+        let participants_left_in_round = participants_deque_resource.participants_deque.len();
+        if participants_left_in_round < 2 {
+            if participants_left_in_round == 1 {
+                if let Some(sole_image) = participants_deque_resource.participants_deque.pop_front()
+                {
+                    insert_match_into_database(round_number, sole_image, 0.0 as u64, sole_image)
+                        .expect("Failed to insert match");
+                }
+                participants_deque_resource.handles_deque.pop_front();
+            }
+            println!("None left");
 
+            round_number += 1;
+            insert_match_into_database(round_number, 0.0 as u64, 0.0 as u64, 0.0 as u64)
+                .expect("Failed to insert match");
+
+            ev_generating.send(TransitionToGeneratingEvent);
+            break;
+        }
+    }
+}
+
+pub fn _display_current_tournament_state(tournament_state: Res<State<TournamentState>>) {
+    print!("{:?} ", tournament_state);
+}
+
+pub fn transition_to_generating_event_listener(
+    mut ev_generating: EventReader<TransitionToGeneratingEvent>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    for _ev in ev_generating.read() {
+        println!("Generating new round...");
+        next_tournament_state.set(TournamentState::Generating);
+    }
+}
+
+pub fn transition_to_loading_event_listener(
+    mut ev_loading: EventReader<TransitionToLoadingEvent>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    for _ev in ev_loading.read() {
+        println!("Generated participants for round.");
+        next_tournament_state.set(TournamentState::Loading);
+    }
+}
+
+pub fn transition_to_displaying_event_listener(
+    mut ev_displaying: EventReader<TransitionToDisplayingEvent>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    for _ev in ev_displaying.read() {
+        println!("Transitioning to displaying...");
+        next_tournament_state.set(TournamentState::Displaying);
+    }
+}
+
+pub fn transition_to_deciding_event_listener(
+    mut ev_deciding: EventReader<TransitionToDecidingEvent>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    for _ev in ev_deciding.read() {
+        println!("Transitioning to deciding...");
+        next_tournament_state.set(TournamentState::Deciding);
+    }
+}
+
+pub fn transition_to_finished_event_listener(
+    mut ev_finished: EventReader<TransitionToFinishedEvent>,
+    mut next_app_state: ResMut<NextState<AppState>>,
+) {
+    for _ev in ev_finished.read() {
+        next_app_state.set(AppState::Finished);
+    }
+}
+
+pub fn despawn_images_event_listener(
+    mut commands: Commands,
+    mut ev_despawn: EventReader<DespawnImagesEvent>,
+    both_image_components_query: Query<Entity, With<BothImageComponents>>,
+) {
+    for _ev in ev_despawn.read() {
         if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
             commands
                 .entity(both_image_components_entity)
                 .despawn_recursive();
         }
+    }
+}
 
-        next_tournament_state.set(TournamentState::Displaying);
+pub fn pop_two_handles_event_listener(
+    mut pop_two_handles_event: EventReader<PopTwoHandlesEvent>,
+    mut participants_deque_resource: ResMut<ParticipantsDeque>,
+) {
+    for _ev in pop_two_handles_event.read() {
+        participants_deque_resource.handles_deque.pop_front();
+        participants_deque_resource.handles_deque.pop_front();
     }
 }

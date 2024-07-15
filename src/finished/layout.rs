@@ -24,7 +24,7 @@ pub fn spawn_finished_screen(
 
     let image_id_1 = participants.get(0).expect("Couldn't get image_id");
     let image_path_1 =
-        get_image_path_from_database(&image_id_1).expect("Failed to get image path from database");
+        get_image_path_from_database(*image_id_1).expect("Failed to get image path from database");
     let image_1 = image::open(&image_path_1).unwrap();
     let (width_1, height_1) = image_1.dimensions();
     let image_aspect_ratio_1 = width_1 as f32 / height_1 as f32;
