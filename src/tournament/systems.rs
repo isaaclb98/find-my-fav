@@ -239,7 +239,7 @@ pub fn display_images(
             }
         } else {
             println!("Handles not found in deque.");
-            break;
+            return;
         }
     }
 
