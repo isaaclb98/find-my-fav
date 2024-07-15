@@ -1,13 +1,14 @@
-use crate::tournament::components::{ParticipantsDeque, TournamentState};
+use crate::tournament::components::{
+    HandlesDeque, ImagesLoadedEvent, ParticipantsDeque, PopHandlesDequeEvent, TournamentState,
+};
 use crate::tournament::interactions::{
-    interact_with_left_image_button, interact_with_right_image_button, ImageClickedEvent,
+    interact_with_left_image_button, interact_with_right_image_button,
 };
-use crate::tournament::systems::{
-    generate_images_to_click, get_participants_for_round, image_clicked_decision_logic,
-};
+use crate::tournament::systems::*;
 use crate::AppState;
 
 use bevy::prelude::*;
+use components::ImageClickedEvent;
 
 pub mod components;
 pub mod interactions;
@@ -18,8 +19,11 @@ pub struct TournamentPlugin;
 impl Plugin for TournamentPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ImageClickedEvent>()
+            .add_event::<ImagesLoadedEvent>()
+            .add_event::<PopHandlesDequeEvent>()
             .init_state::<TournamentState>()
             .init_resource::<ParticipantsDeque>()
+            .init_resource::<HandlesDeque>()
             .add_systems(
                 Update,
                 get_participants_for_round
@@ -28,7 +32,7 @@ impl Plugin for TournamentPlugin {
             )
             .add_systems(
                 Update,
-                generate_images_to_click
+                (load_images, display_images, images_loaded_event_logic)
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Displaying)),
             )
@@ -38,6 +42,7 @@ impl Plugin for TournamentPlugin {
                     interact_with_left_image_button,
                     interact_with_right_image_button,
                     image_clicked_decision_logic,
+                    pop_handles_deque_event_logic,
                 )
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Deciding)),

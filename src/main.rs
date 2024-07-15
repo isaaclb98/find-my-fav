@@ -18,6 +18,7 @@ mod tournament;
 
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 pub enum AppState {
+    // Loading,
     #[default]
     MainMenu,
     SpeedSelect,
@@ -43,6 +44,5 @@ fn main() {
         .init_state::<AppState>()
         .init_resource::<ImageFolderPath>()
         .add_systems(Startup, spawn_camera)
-        .add_systems(Update, show_app_state)
         .run();
 }

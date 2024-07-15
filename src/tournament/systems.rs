@@ -1,27 +1,25 @@
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+use bevy::asset::{AssetServer, Handle, LoadState};
+use bevy::hierarchy::{BuildChildren, DespawnRecursiveExt};
+use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
+use image::GenericImageView;
+use rand::prelude::SliceRandom;
+use rand::thread_rng;
+
 use crate::database::{
     get_image_path_from_database, get_latest_round_number, get_remaining_participants,
     increment_rating, insert_match_into_database, set_loser_out,
 };
 use crate::styles::NODE_BUNDLE_EMPTY_ROW_STYLE;
+use crate::tournament::components::*;
 use crate::tournament::components::{
-    BothImageComponents, LeftImageComponent, ParticipantsDeque, RightImageComponent,
+    BothImageComponents, HandlesDeque, LeftImageComponent, ParticipantsDeque, RightImageComponent,
     TournamentState,
 };
-use crate::tournament::interactions::ImageClickedEvent;
 use crate::AppState;
-use bevy::asset::{AssetServer, Handle};
-use bevy::color::Color;
-use bevy::hierarchy::{BuildChildren, DespawnRecursiveExt};
-use bevy::prelude::{
-    default, ButtonBundle, Commands, Entity, EventReader, Image, NextState, NodeBundle, Query, Res,
-    ResMut, Style, UiImage, Val, Window, With,
-};
-use bevy::window::PrimaryWindow;
-use image::GenericImageView;
-use rand::prelude::SliceRandom;
-use rand::thread_rng;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 pub fn get_participants_for_round(
     mut commands: Commands,
@@ -71,19 +69,15 @@ fn sanitize_filename(path: &Path) -> PathBuf {
     PathBuf::from(sanitized)
 }
 
-pub fn generate_images_to_click(
+pub fn load_images(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    images: Res<Assets<Image>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
+    mut handles_deque_resource: ResMut<HandlesDeque>,
     mut next_tournament_state: ResMut<NextState<TournamentState>>,
 ) {
-    let start_time = Instant::now();
-
-    let window: &Window = window_query.get_single().unwrap();
-    let window_width = window.width();
-    let window_height = window.height();
-
     let image_ids: Option<(u64, u64)> = {
         let deque = &participants_deque_resource.deque;
         if let (Some(&image_id_1), Some(&image_id_2)) = (deque.get(0), deque.get(1)) {
@@ -102,156 +96,220 @@ pub fn generate_images_to_click(
         let image_path_1 = sanitize_filename(&image_path_1);
         let image_path_2 = sanitize_filename(&image_path_2);
 
-        let mut error_occurred = false;
-        let image_1 = image::open(&image_path_1).unwrap_or_else(|_| {
-            let round_number = get_latest_round_number().expect("Failed to get round number");
+        let texture_handle_1: Handle<Image> = asset_server.load(image_path_1.clone());
+        let texture_handle_2: Handle<Image> = asset_server.load(image_path_2.clone());
 
-            participants_deque_resource
-                .deque
-                .remove(0)
-                .expect("Failed to remove from deque");
+        handles_deque_resource
+            .image_deque
+            .push_back(texture_handle_1);
+        handles_deque_resource
+            .image_deque
+            .push_back(texture_handle_2);
 
-            set_loser_out(image_id_1).expect("Failed to set loser");
-            insert_match_into_database(round_number, image_id_1, image_id_2, image_id_2)
-                .expect("Failed to insert match");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
 
-            println!("Handled an error for an image. ID: {}", image_id_1);
+pub fn display_images(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut handles_deque_resource: ResMut<HandlesDeque>,
+    images: Res<Assets<Image>>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    mut event_writer: EventWriter<ImagesLoadedEvent>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    let window: &Window = window_query.get_single().unwrap();
+    let window_width = window.width();
+    let window_height = window.height();
 
-            error_occurred = true;
+    let mut images_loaded = false;
 
-            Default::default()
-        });
+    while !images_loaded {
+        if let (Some(texture_handle_1), Some(texture_handle_2)) = (
+            handles_deque_resource.image_deque.get(0),
+            handles_deque_resource.image_deque.get(1),
+        ) {
+            if let (Some(LoadState::Loaded), Some(LoadState::Loaded)) = (
+                asset_server.get_load_state(texture_handle_1),
+                asset_server.get_load_state(texture_handle_2),
+            ) {
+                println!("IMAGES LOADED.");
+                images_loaded = true;
 
-        if error_occurred {
-            return;
-        }
+                if let (Some(image_1), Some(image_2)) =
+                    (images.get(texture_handle_1), images.get(texture_handle_2))
+                {
+                    let size_1 = image_1.size();
+                    let size_2 = image_2.size();
 
-        let image_2 = image::open(&image_path_2).unwrap_or_else(|_| {
-            let round_number = get_latest_round_number().expect("Failed to get round number");
+                    println!("Image 1 size: {:?}", size_1);
+                    println!("Image 2 size: {:?}", size_2);
 
-            participants_deque_resource
-                .deque
-                .remove(1)
-                .expect("Failed to remove from deque");
+                    let width_1 = size_1.x as f32;
+                    let height_1 = size_1.y as f32;
+                    let width_2 = size_2.x as f32;
+                    let height_2 = size_2.y as f32;
 
-            set_loser_out(image_id_2).expect("Failed to set loser");
-            insert_match_into_database(round_number, image_id_1, image_id_2, image_id_1)
-                .expect("Failed to insert match");
+                    let image_aspect_ratio_1 = width_1 / height_1;
+                    let image_aspect_ratio_2 = width_2 / height_2;
 
-            println!("Handled an error for an image. ID: {}", image_id_2);
+                    // Calculate the target width to be half of the window's width
+                    let target_width = window_width / 2.0;
 
-            error_occurred = true;
+                    // Calculate the target height to maintain the aspect ratio
+                    let target_height_1 = target_width / image_aspect_ratio_1;
+                    let target_height_2 = target_width / image_aspect_ratio_2;
 
-            Default::default()
-        });
+                    // If the target height is greater than the window height, adjust the target dimensions
+                    let (final_width_1, final_height_1) = if target_height_1 > window_height {
+                        let adjusted_height = window_height;
+                        let adjusted_width = adjusted_height * image_aspect_ratio_1;
+                        (adjusted_width, adjusted_height)
+                    } else {
+                        (target_width, target_height_1)
+                    };
+                    let (final_width_2, final_height_2) = if target_height_2 > window_height {
+                        let adjusted_height = window_height;
+                        let adjusted_width = adjusted_height * image_aspect_ratio_2;
+                        (adjusted_width, adjusted_height)
+                    } else {
+                        (target_width, target_height_2)
+                    };
 
-        if error_occurred {
-            return;
-        }
-
-        let duration = start_time.elapsed();
-        println!("getting the images took {:?}", duration);
-
-        // Get the image dimensions
-        let (width_1, height_1) = image_1.dimensions();
-        println!("Image 1 dimensions: {}x{}", width_1, height_1);
-        let (width_2, height_2) = image_2.dimensions();
-        println!("Image 2 dimensions: {}x{}", width_2, height_2);
-
-        let image_aspect_ratio_1 = width_1 as f32 / height_1 as f32;
-        let image_aspect_ratio_2 = width_2 as f32 / height_2 as f32;
-
-        // Calculate the target width to be half of the window's width
-        let target_width = window_width / 2.0;
-
-        // Calculate the target height to maintain the aspect ratio
-        let target_height_1 = target_width / image_aspect_ratio_1;
-        let target_height_2 = target_width / image_aspect_ratio_2;
-
-        // If the target height is greater than the window height, adjust the target dimensions
-        let (final_width_1, final_height_1) = if target_height_1 > window_height {
-            let adjusted_height = window_height;
-            let adjusted_width = adjusted_height * image_aspect_ratio_1;
-            (adjusted_width, adjusted_height)
-        } else {
-            (target_width, target_height_1)
-        };
-        let (final_width_2, final_height_2) = if target_height_2 > window_height {
-            let adjusted_height = window_height;
-            let adjusted_width = adjusted_height * image_aspect_ratio_2;
-            (adjusted_width, adjusted_height)
-        } else {
-            (target_width, target_height_2)
-        };
-
-        // Load the image as a Bevy asset
-        let texture_handle_1: Handle<Image> = asset_server.load(image_path_1);
-        let texture_handle_2: Handle<Image> = asset_server.load(image_path_2);
-
-        let start_time = Instant::now();
-
-        commands
-            .spawn((
-                NodeBundle {
-                    style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                    ..default()
-                },
-                BothImageComponents,
-            ))
-            .with_children(|parent| {
-                parent
-                    .spawn(NodeBundle {
-                        style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                        ..default()
-                    })
-                    .with_children(|parent| {
-                        // image 1
-                        parent.spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Px(final_width_1),
-                                    height: Val::Px(final_height_1),
-                                    ..Default::default()
-                                },
-                                image: UiImage::new(texture_handle_1),
+                    commands
+                        .spawn((
+                            NodeBundle {
+                                style: NODE_BUNDLE_EMPTY_ROW_STYLE,
                                 ..default()
                             },
-                            LeftImageComponent {},
-                        ));
-                    });
+                            BothImageComponents,
+                        ))
+                        .with_children(|parent| {
+                            parent
+                                .spawn(NodeBundle {
+                                    style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                                    ..default()
+                                })
+                                .with_children(|parent| {
+                                    // image 1
+                                    parent.spawn((
+                                        ButtonBundle {
+                                            style: Style {
+                                                width: Val::Px(final_width_1),
+                                                height: Val::Px(final_height_1),
+                                                ..Default::default()
+                                            },
+                                            image: UiImage::new(texture_handle_1.clone()),
+                                            ..default()
+                                        },
+                                        LeftImageComponent {},
+                                    ));
+                                });
 
-                parent
-                    .spawn(NodeBundle {
-                        style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                        ..default()
-                    })
-                    .with_children(|parent| {
-                        // image 2
-                        parent.spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Px(final_width_2),
-                                    height: Val::Px(final_height_2),
-                                    ..Default::default()
-                                },
-                                image: UiImage::new(texture_handle_2),
-                                ..default()
-                            },
-                            RightImageComponent {},
-                        ));
-                    });
-            });
+                            parent
+                                .spawn(NodeBundle {
+                                    style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                                    ..default()
+                                })
+                                .with_children(|parent| {
+                                    // image 2
+                                    parent.spawn((
+                                        ButtonBundle {
+                                            style: Style {
+                                                width: Val::Px(final_width_2),
+                                                height: Val::Px(final_height_2),
+                                                ..Default::default()
+                                            },
+                                            image: UiImage::new(texture_handle_2.clone()),
+                                            ..default()
+                                        },
+                                        RightImageComponent {},
+                                    ));
+                                });
+                        });
+
+                    event_writer.send(ImagesLoadedEvent);
+                    return;
+                }
+            } else {
+                println!("waiting...");
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                return;
+            }
+        } else {
+            println!("Handles not found in deque.");
+            break;
+        }
     }
 
-    next_tournament_state.set(TournamentState::Deciding);
+    // commands
+    //     .spawn((
+    //         NodeBundle {
+    //             style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+    //             ..default()
+    //         },
+    //         BothImageComponents,
+    //     ))
+    //     .with_children(|parent| {
+    //         parent
+    //             .spawn(NodeBundle {
+    //                 style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+    //                 ..default()
+    //             })
+    //             .with_children(|parent| {
+    //                 // image 1
+    //                 parent.spawn((
+    //                     ButtonBundle {
+    //                         style: Style {
+    //                             width: Val::Px(final_width_1),
+    //                             height: Val::Px(final_height_1),
+    //                             ..Default::default()
+    //                         },
+    //                         image: UiImage::new(texture_handle_1.clone()),
+    //                         ..default()
+    //                     },
+    //                     LeftImageComponent {},
+    //                 ));
+    //             });
+    //
+    //         parent
+    //             .spawn(NodeBundle {
+    //                 style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+    //                 ..default()
+    //             })
+    //             .with_children(|parent| {
+    //                 // image 2
+    //                 parent.spawn((
+    //                     ButtonBundle {
+    //                         style: Style {
+    //                             width: Val::Px(final_width_2),
+    //                             height: Val::Px(final_height_2),
+    //                             ..Default::default()
+    //                         },
+    //                         image: UiImage::new(texture_handle_2.clone()),
+    //                         ..default()
+    //                     },
+    //                     RightImageComponent {},
+    //                 ));
+    //             });
+    //     });
+}
+
+pub fn images_loaded_event_logic(
+    mut event_reader: EventReader<ImagesLoadedEvent>,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    for ev in event_reader.read() {
+        next_tournament_state.set(TournamentState::Deciding);
+    }
 }
 
 pub fn image_clicked_decision_logic(
-    mut commands: Commands,
     mut image_clicked_event: EventReader<ImageClickedEvent>,
-    mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut next_tournament_state: ResMut<NextState<TournamentState>>,
-    both_image_components_query: Query<Entity, With<BothImageComponents>>,
+    mut participants_deque_resource: ResMut<ParticipantsDeque>,
+    mut pop_handles_deque_event_writer: EventWriter<PopHandlesDequeEvent>,
 ) {
     if let None = participants_deque_resource.deque.get(1) {
         let mut round_number = get_latest_round_number().expect("Failed to get round number");
@@ -273,7 +331,7 @@ pub fn image_clicked_decision_logic(
     }
 
     for ev in image_clicked_event.read() {
-        // println!("Before popping: {:?}", participants_deque_resource.deque);
+        println!("Before popping: {:?}", participants_deque_resource.deque);
 
         let image_id_1 = participants_deque_resource
             .deque
@@ -284,8 +342,8 @@ pub fn image_clicked_decision_logic(
             .pop_front()
             .expect("Failed to pop");
 
-        // println!("Popped IDs: {}, {}", image_id_1, image_id_2);
-        // println!("After popping: {:?}", participants_deque_resource.deque);
+        println!("Popped IDs: {}, {}", image_id_1, image_id_2);
+        println!("After popping: {:?}", participants_deque_resource.deque);
 
         let round_number = get_latest_round_number().expect("Failed to get round number");
 
@@ -302,6 +360,31 @@ pub fn image_clicked_decision_logic(
                 .expect("Failed to insert match");
             println!("Set winner to rightie.");
         }
+
+        pop_handles_deque_event_writer.send(PopHandlesDequeEvent);
+    }
+}
+
+pub fn pop_handles_deque_event_logic(
+    mut event_reader: EventReader<PopHandlesDequeEvent>,
+    mut handles_deque_resource: ResMut<HandlesDeque>,
+    both_image_components_query: Query<Entity, With<BothImageComponents>>,
+    mut commands: Commands,
+    mut next_tournament_state: ResMut<NextState<TournamentState>>,
+) {
+    for ev in event_reader.read() {
+        println!(
+            "Before popping handles deque: {:?}",
+            handles_deque_resource.image_deque
+        );
+
+        handles_deque_resource.image_deque.remove(0);
+        handles_deque_resource.image_deque.remove(1);
+
+        println!(
+            "After popping handles deque: {:?}",
+            handles_deque_resource.image_deque
+        );
 
         if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
             commands
