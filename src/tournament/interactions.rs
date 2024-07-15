@@ -1,5 +1,10 @@
-use crate::tournament::components::{ImageClickedEvent, LeftImageComponent, RightImageComponent};
+use crate::tournament::components::{LeftImageComponent, RightImageComponent};
 use bevy::prelude::*;
+
+#[derive(Event)]
+pub struct ImageClickedEvent {
+    pub(crate) left_image: bool,
+}
 
 pub fn interact_with_left_image_button(
     mut button_query: Query<&Interaction, (Changed<Interaction>, With<LeftImageComponent>)>,
