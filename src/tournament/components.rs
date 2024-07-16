@@ -1,10 +1,16 @@
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
-#[derive(Resource, Default, Debug)]
+pub struct ParticipantInfo {
+    pub id: u64,
+    pub handle: Option<Handle<Image>>,
+    pub loaded: bool,
+    pub errored: bool,
+}
+
+#[derive(Resource, Default)]
 pub struct ParticipantsDeque {
-    pub participants_deque: VecDeque<u64>,
-    pub handles_deque: VecDeque<Handle<Image>>,
+    pub participants_deque: VecDeque<ParticipantInfo>,
 }
 
 #[derive(Resource, Default, Debug)]
@@ -12,13 +18,21 @@ pub struct ParticipantsToLoadDeque {
     pub participants_to_load_deque: VecDeque<u64>,
 }
 
+#[derive(Resource, Default, Debug)]
+pub struct Indices {
+    pub index_1: usize,
+    pub index_2: usize,
+}
+
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 pub enum TournamentState {
     #[default]
+    Entering,
     Generating,
-    Displaying,
     Loading,
+    Displaying,
     Deciding,
+    Resolving,
 }
 
 #[derive(Component)]
@@ -41,6 +55,9 @@ pub struct TransitionToDisplayingEvent;
 
 #[derive(Event)]
 pub struct TransitionToDecidingEvent;
+
+#[derive(Event)]
+pub struct TransitionToResolvingEvent;
 
 #[derive(Event)]
 pub struct TransitionToFinishedEvent;

@@ -20,24 +20,27 @@ impl Plugin for TournamentPlugin {
             .add_event::<TransitionToDecidingEvent>()
             .add_event::<TransitionToFinishedEvent>()
             .add_event::<DespawnImagesEvent>()
-            .add_event::<TwoImagesLoadedEvent>()
-            .add_event::<PopTwoHandlesEvent>()
             .add_event::<ImageClickedEvent>()
-            .add_event::<ImageErrorEvent>()
-            .add_event::<NewRoundNeeded>()
+            .add_event::<TransitionToResolvingEvent>()
             .init_state::<TournamentState>()
             .init_resource::<ParticipantsDeque>()
             .init_resource::<ParticipantsToLoadDeque>()
+            .init_resource::<Indices>()
             .add_systems(
                 Update,
-                get_participants_for_round
-                    .run_if(in_state(AppState::Tournament))
-                    .run_if(in_state(TournamentState::Generating)),
+                enter_into_tournament.run_if(in_state(TournamentState::Entering)),
+            )
+            .add_systems(
+                OnEnter(TournamentState::Generating),
+                get_participants_for_round.run_if(in_state(AppState::Tournament)),
             )
             .add_systems(
                 Update,
-                (check_if_two_images_are_loaded, load_images)
-                    .after(image_error_event_listener)
+                (
+                    check_if_image_is_okay,
+                    find_first_two_loaded_indices,
+                    load_images,
+                )
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Loading)),
             )
@@ -53,10 +56,12 @@ impl Plugin for TournamentPlugin {
                     interact_with_left_image_button,
                     interact_with_right_image_button,
                     image_clicked_decision_logic,
+                    load_images,
                 )
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Deciding)),
             )
+            .add_systems(OnEnter(TournamentState::Resolving), resolve_deque)
             .add_systems(
                 Update,
                 (
@@ -64,10 +69,9 @@ impl Plugin for TournamentPlugin {
                     transition_to_loading_event_listener,
                     transition_to_displaying_event_listener,
                     transition_to_deciding_event_listener,
+                    transition_to_resolving_event_listener,
                     transition_to_finished_event_listener,
                     despawn_images_event_listener,
-                    image_error_event_listener,
-                    new_round_needed_event_listener,
                 )
                     .run_if(in_state(AppState::Tournament)),
             );
