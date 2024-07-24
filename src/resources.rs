@@ -13,3 +13,12 @@ impl Default for ImageFolderPath {
         }
     }
 }
+
+#[derive(Resource)]
+pub struct UsedMemory(pub f64);
+
+impl Default for UsedMemory {
+    fn default() -> Self {
+        UsedMemory(0.0)
+    }
+}

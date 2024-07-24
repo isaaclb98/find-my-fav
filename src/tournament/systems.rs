@@ -7,6 +7,7 @@ use rand::prelude::SliceRandom;
 use rand::thread_rng;
 
 use crate::database::*;
+use crate::resources::UsedMemory;
 use crate::styles::NODE_BUNDLE_EMPTY_ROW_STYLE;
 use crate::tournament::components::*;
 use crate::AppState;
@@ -64,41 +65,50 @@ pub fn load_images(
     asset_server: Res<AssetServer>,
     mut participants_to_load_resource: ResMut<ParticipantsToLoadDeque>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
+    used_memory_res: Res<UsedMemory>,
 ) {
-    let image_id_option: Option<u64> = {
-        if let Some(image_id_1) = participants_to_load_resource
-            .participants_to_load_deque
-            .pop_front()
-        {
-            Some(image_id_1)
-        } else {
-            None
-        }
-    };
+    // Don't load any more images if memory used is greater than or equal to 90.0% of total memory
+    if used_memory_res.0 < 90.0 {
+        let image_id_option: Option<u64> = {
+            if let Some(image_id_1) = participants_to_load_resource
+                .participants_to_load_deque
+                .pop_front()
+            {
+                Some(image_id_1)
+            } else {
+                None
+            }
+        };
 
-    if let Some(image_id) = image_id_option {
-        let image_path = get_image_path_from_database(image_id)
-            .expect("Could not load the image path from the database.");
+        if let Some(image_id) = image_id_option {
+            let image_path = get_image_path_from_database(image_id)
+                .expect("Could not load the image path from the database.");
 
-        let mut image_handle: Option<Handle<Image>> = None;
+            let mut image_handle: Option<Handle<Image>> = None;
 
-        let errored = contains_non_ascii(&image_path);
+            let errored = contains_non_ascii(&image_path);
 
-        if !errored {
-            image_handle = Some(asset_server.load(image_path));
-        } else {
-            println!("{} contains non-ASCII characters and cannot be loaded by bevy. Setting to errored.", image_path.to_string_lossy().to_string());
-        }
+            if !errored {
+                image_handle = Some(asset_server.load(image_path));
+            } else {
+                println!("{} contains non-ASCII characters and cannot be loaded by bevy. Setting to errored.", image_path.to_string_lossy().to_string());
+            }
 
-        for participant in &mut participants_deque_resource.participants_deque {
-            if participant.id == image_id {
-                participant.handle = image_handle.clone();
+            for participant in &mut participants_deque_resource.participants_deque {
+                if participant.id == image_id {
+                    participant.handle = image_handle.clone();
 
-                if errored {
-                    participant.errored = true;
+                    if errored {
+                        participant.errored = true;
+                    }
                 }
             }
         }
+    } else {
+        println!(
+            "Current memory usage is {:.2}%. Not loading any more images.",
+            used_memory_res.0
+        );
     }
 }
 
@@ -146,17 +156,11 @@ pub fn find_first_two_loaded_indices(
     }
 
     if loaded_indices.len() == 2 {
-        println!(
-            "First two loaded indices: {:?} and {:?}",
-            loaded_indices[0], loaded_indices[1]
-        );
-
         indices.index_1 = loaded_indices[0];
         indices.index_2 = loaded_indices[1];
         ev_displaying.send(TransitionToDisplayingEvent);
     } else {
         println!("Less than two participants are loaded.");
-        println!("");
     }
 }
 
@@ -281,7 +285,6 @@ pub fn display_two_loaded_images(
 
             ev_deciding.send(TransitionToDecidingEvent);
         }
-        println!("Error in Display: display_two_loaded_images.");
     }
 }
 
@@ -312,13 +315,13 @@ pub fn image_clicked_decision_logic(
                     increment_rating(image_id_1).expect("Failed to increment rating");
                     insert_match_into_database(round_number, image_id_1, image_id_2, image_id_1)
                         .expect("Failed to insert match");
-                    println!("Set winner to leftie.");
+                    println!("Set winner to left.");
                 } else {
                     set_loser_out(image_id_1).expect("Failed to set loser");
                     increment_rating(image_id_2).expect("Failed to increment rating");
                     insert_match_into_database(round_number, image_id_2, image_id_1, image_id_2)
                         .expect("Failed to insert match");
-                    println!("Set winner to rightie.");
+                    println!("Set winner to right.");
                 }
 
                 ev_resolving.send(TransitionToResolvingEvent);
@@ -432,7 +435,7 @@ pub fn transition_to_resolving_event_listener(
     mut next_tournament_state: ResMut<NextState<TournamentState>>,
 ) {
     for _ev in ev_resolving.read() {
-        println!("Transitioning to deciding...");
+        println!("Transitioning to resolving...");
         next_tournament_state.set(TournamentState::Resolving);
     }
 }
@@ -444,16 +447,6 @@ pub fn transition_to_finished_event_listener(
     for _ev in ev_finished.read() {
         next_app_state.set(AppState::Finished);
     }
-}
-
-fn _sanitize_filename(path: PathBuf) -> PathBuf {
-    let sanitized: String = path
-        .to_string_lossy()
-        .chars()
-        .filter(|c| c.is_ascii())
-        .collect();
-
-    PathBuf::from(sanitized)
 }
 
 pub fn despawn_images_event_listener(

@@ -1,6 +1,6 @@
 use crate::finished::FinishedPlugin;
 use crate::main_menu::MainMenuPlugin;
-use crate::resources::ImageFolderPath;
+use crate::resources::{ImageFolderPath, UsedMemory};
 use crate::speed_select::SpeedSelectPlugin;
 use crate::systems::*;
 use crate::tournament::TournamentPlugin;
@@ -42,6 +42,8 @@ fn main() {
         .add_plugins(FinishedPlugin)
         .init_state::<AppState>()
         .init_resource::<ImageFolderPath>()
+        .init_resource::<UsedMemory>()
         .add_systems(Startup, spawn_camera)
+        .add_systems(Update, get_used_memory_percentage)
         .run();
 }
