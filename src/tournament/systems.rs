@@ -26,6 +26,8 @@ pub fn get_participants_for_round(
 ) {
     let mut participants = get_remaining_participants().unwrap();
 
+    println!("Participants for round: {:?}", participants);
+
     // Tournament over
     if participants.len() == 1 {
         println!("The tournament is now over.");
@@ -78,14 +80,25 @@ pub fn load_images(
         let image_path = get_image_path_from_database(image_id)
             .expect("Could not load the image path from the database.");
 
-        let image_handle: Handle<Image> = asset_server.load(image_path);
+        let mut image_handle: Option<Handle<Image>> = None;
+
+        let errored = contains_non_ascii(&image_path);
+
+        if !errored {
+            image_handle = Some(asset_server.load(image_path));
+        } else {
+            println!("{} contains non-ASCII characters and cannot be loaded by bevy. Setting to errored.", image_path.to_string_lossy().to_string());
+        }
 
         for participant in &mut participants_deque_resource.participants_deque {
             if participant.id == image_id {
-                participant.handle = Some(image_handle.clone());
+                participant.handle = image_handle.clone();
+
+                if errored {
+                    participant.errored = true;
+                }
             }
         }
-    } else {
     }
 }
 
@@ -143,6 +156,7 @@ pub fn find_first_two_loaded_indices(
         ev_displaying.send(TransitionToDisplayingEvent);
     } else {
         println!("Less than two participants are loaded.");
+        println!("");
     }
 }
 
@@ -454,4 +468,8 @@ pub fn despawn_images_event_listener(
                 .despawn_recursive();
         }
     }
+}
+
+fn contains_non_ascii(path: &PathBuf) -> bool {
+    path.to_string_lossy().chars().any(|c| !c.is_ascii())
 }
