@@ -17,6 +17,11 @@ fn get_database_path() -> Result<PathBuf> {
     Ok(db_path)
 }
 
+pub fn database_exists() -> bool {
+    let db_path = get_database_path().expect("Failed to get the database path.");
+    db_path.exists()
+}
+
 pub(crate) fn initialize_database(image_folder_path: PathBuf) -> Result<()> {
     let db_path = get_database_path().expect("Error getting database path.");
 
@@ -121,7 +126,10 @@ pub(crate) fn get_remaining_participants() -> Result<Vec<u64>> {
     Ok(participants)
 }
 
-pub(crate) fn _get_image_path_with_max_rating(conn: &Connection) -> Result<String> {
+pub(crate) fn get_image_path_with_max_rating() -> Result<String> {
+    let db_path = get_database_path().expect("Error getting database path.");
+    let conn = Connection::open(db_path).expect("Error opening connection");
+
     conn.query_row(
         "SELECT image_path FROM images ORDER BY rating DESC LIMIT 1",
         params![],
