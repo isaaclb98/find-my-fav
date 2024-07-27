@@ -5,7 +5,7 @@ use bevy::app::{App, Plugin, Update};
 use bevy::prelude::*;
 use components::SpeedState;
 
-mod components;
+pub mod components;
 pub mod interactions;
 pub mod layout;
 

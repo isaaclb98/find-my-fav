@@ -26,6 +26,7 @@ impl Plugin for TournamentPlugin {
             .init_resource::<ParticipantsDeque>()
             .init_resource::<ParticipantsToLoadDeque>()
             .init_resource::<ParticipantsDequeIndices>()
+            .init_resource::<NumberOfParticipantsForMatch>()
             .add_systems(
                 Update,
                 enter_into_tournament.run_if(in_state(TournamentState::Entering)),

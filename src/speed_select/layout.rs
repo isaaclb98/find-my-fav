@@ -9,8 +9,7 @@ pub fn spawn_speed_select(
     asset_server: Res<AssetServer>,
     window_query: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let speed_select_entity =
-        build_speed_select(&mut commands, &asset_server, &window_query, false);
+    let speed_select_entity = build_speed_select(&mut commands, &asset_server, &window_query, true);
 }
 
 pub fn despawn_speed_select(

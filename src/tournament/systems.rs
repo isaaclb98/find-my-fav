@@ -8,7 +8,8 @@ use rand::thread_rng;
 
 use crate::database::*;
 use crate::resources::UsedMemory;
-use crate::styles::NODE_BUNDLE_EMPTY_ROW_STYLE;
+use crate::speed_select::components::*;
+use crate::styles::{NODE_BUNDLE_EMPTY_COLUMN_STYLE, NODE_BUNDLE_EMPTY_ROW_STYLE};
 use crate::tournament::components::*;
 use crate::AppState;
 
@@ -19,8 +20,17 @@ pub fn get_participants_for_round(
     mut ev_despawn: EventWriter<DespawnImagesEvent>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut participants_to_load_resource: ResMut<ParticipantsToLoadDeque>,
+    speed_state: Res<State<SpeedState>>,
+    mut number_of_participants_for_match: ResMut<NumberOfParticipantsForMatch>,
 ) {
     let mut participants = get_remaining_participants().unwrap();
+
+    let num_participants = participants.len();
+    calculate_number_of_images_for_match(
+        num_participants,
+        &speed_state,
+        &mut number_of_participants_for_match,
+    );
 
     println!("Participants for round: {:?}", participants);
 
@@ -130,13 +140,15 @@ pub fn check_if_image_has_loaded(
     }
 }
 
-/// This function finds the first two indices in the participants deque which have been successfully loaded.
+/// This function finds the indices in the participants deque which have been successfully loaded.
 pub fn find_first_two_loaded_indices(
     participants_deque_resource: Res<ParticipantsDeque>,
     mut indices: ResMut<ParticipantsDequeIndices>,
     mut ev_displaying: EventWriter<TransitionToDisplayingEvent>,
+    number_of_participants_for_match: Res<NumberOfParticipantsForMatch>,
 ) {
     let mut loaded_indices = Vec::new();
+    let num_images = number_of_participants_for_match.0;
 
     for (index, participant) in participants_deque_resource
         .participants_deque
@@ -145,22 +157,23 @@ pub fn find_first_two_loaded_indices(
     {
         if participant.loaded {
             loaded_indices.push(index);
-            if loaded_indices.len() == 2 {
+            if loaded_indices.len() == num_images {
                 break;
             }
         }
     }
 
-    if loaded_indices.len() == 2 {
-        indices.indices.push(loaded_indices[0]);
-        indices.indices.push(loaded_indices[1]);
+    if loaded_indices.len() == num_images {
+        for i in 0..num_images {
+            indices.indices.push(loaded_indices[i]);
+        }
         ev_displaying.send(TransitionToDisplayingEvent);
     } else {
         println!("Less than two participants are loaded.");
     }
 }
 
-/// This function displays two images for the user to choose between.
+/// This function displays images for the user to choose between.
 pub fn display_two_loaded_images(
     mut commands: Commands,
     mut ev_deciding: EventWriter<TransitionToDecidingEvent>,
@@ -169,6 +182,7 @@ pub fn display_two_loaded_images(
     window_query: Query<&Window, With<PrimaryWindow>>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut indices: ResMut<ParticipantsDequeIndices>,
+    number_of_participants_for_match: Res<NumberOfParticipantsForMatch>,
 ) {
     // Despawn the preexisting images if they exist
     if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
@@ -177,111 +191,83 @@ pub fn display_two_loaded_images(
             .despawn_recursive();
     }
 
-    if let (Some(participant_1), Some(participant_2)) = (
-        participants_deque_resource
-            .participants_deque
-            .get(indices.indices[0]),
-        participants_deque_resource
-            .participants_deque
-            .get(indices.indices[1]),
-    ) {
-        if let (Some(image_1), Some(image_2)) = (
-            images.get(&participant_1.handle.clone().unwrap()),
-            images.get(&participant_2.handle.clone().unwrap()),
-        ) {
-            let size_1 = image_1.size();
-            let size_2 = image_2.size();
+    let window: &Window = window_query.get_single().unwrap();
+    let window_width = window.width();
+    let window_height = window.height();
+    let num_images = number_of_participants_for_match.0;
+    let num_rows = if num_images >= 4 { 2 } else { 1 };
+    let images_per_row = (num_images as f32 / num_rows as f32).ceil() as usize;
+    let target_width = window_width / images_per_row as f32;
 
-            let width_1 = size_1.x as f32;
-            let height_1 = size_1.y as f32;
-            let width_2 = size_2.x as f32;
-            let height_2 = size_2.y as f32;
-
-            let image_aspect_ratio_1 = width_1 / height_1;
-            let image_aspect_ratio_2 = width_2 / height_2;
-
-            let window: &Window = window_query.get_single().unwrap();
-            let window_width = window.width();
-            let window_height = window.height();
-
-            // Calculate the target width to be half of the window's width
-            let target_width = window_width / 2.0;
-
-            // Calculate the target height to maintain the aspect ratio
-            let target_height_1 = target_width / image_aspect_ratio_1;
-            let target_height_2 = target_width / image_aspect_ratio_2;
-
-            // If the target height is greater than the window height, adjust the target dimensions
-            let (final_width_1, final_height_1) = if target_height_1 > window_height {
-                let adjusted_height = window_height;
-                let adjusted_width = adjusted_height * image_aspect_ratio_1;
-                (adjusted_width, adjusted_height)
-            } else {
-                (target_width, target_height_1)
-            };
-            let (final_width_2, final_height_2) = if target_height_2 > window_height {
-                let adjusted_height = window_height;
-                let adjusted_width = adjusted_height * image_aspect_ratio_2;
-                (adjusted_width, adjusted_height)
-            } else {
-                (target_width, target_height_2)
-            };
-
-            commands
-                .spawn((
-                    NodeBundle {
+    commands
+        .spawn((
+            NodeBundle {
+                style: NODE_BUNDLE_EMPTY_COLUMN_STYLE,
+                ..default()
+            },
+            BothImageComponents,
+        ))
+        .with_children(|parent| {
+            for row in 0..num_rows {
+                parent
+                    .spawn(NodeBundle {
                         style: NODE_BUNDLE_EMPTY_ROW_STYLE,
                         ..default()
-                    },
-                    BothImageComponents,
-                ))
-                .with_children(|parent| {
-                    parent
-                        .spawn(NodeBundle {
-                            style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                            ..default()
-                        })
-                        .with_children(|parent| {
-                            // image 1
-                            parent.spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Px(final_width_1),
-                                        height: Val::Px(final_height_1),
-                                        ..Default::default()
-                                    },
-                                    image: UiImage::new(participant_1.handle.clone().unwrap()),
-                                    ..default()
-                                },
-                                LeftImageComponent {},
-                            ));
-                        });
+                    })
+                    .with_children(|parent| {
+                        for i in 0..images_per_row {
+                            let idx = row * images_per_row + i;
+                            if idx < num_images {
+                                if let Some(participant) = participants_deque_resource
+                                    .participants_deque
+                                    .get(indices.indices[idx])
+                                {
+                                    if let Some(image) =
+                                        images.get(&participant.handle.clone().unwrap())
+                                    {
+                                        let size = image.size();
+                                        let width = size.x as f32;
+                                        let height = size.y as f32;
+                                        let image_aspect_ratio = width / height;
 
-                    parent
-                        .spawn(NodeBundle {
-                            style: NODE_BUNDLE_EMPTY_ROW_STYLE,
-                            ..default()
-                        })
-                        .with_children(|parent| {
-                            // image 2
-                            parent.spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Px(final_width_2),
-                                        height: Val::Px(final_height_2),
-                                        ..Default::default()
-                                    },
-                                    image: UiImage::new(participant_2.handle.clone().unwrap()),
-                                    ..default()
-                                },
-                                RightImageComponent {},
-                            ));
-                        });
-                });
+                                        let target_height = target_width / image_aspect_ratio;
+                                        let (final_width, final_height) = if target_height
+                                            > window_height / num_rows as f32
+                                        {
+                                            let adjusted_height = window_height / num_rows as f32;
+                                            let adjusted_width =
+                                                adjusted_height * image_aspect_ratio;
+                                            (adjusted_width, adjusted_height)
+                                        } else {
+                                            (target_width, target_height)
+                                        };
 
-            ev_deciding.send(TransitionToDecidingEvent);
-        }
-    }
+                                        parent
+                                            .spawn(NodeBundle {
+                                                style: NODE_BUNDLE_EMPTY_ROW_STYLE,
+                                                ..default()
+                                            })
+                                            .with_children(|parent| {
+                                                // Image
+                                                parent.spawn((ButtonBundle {
+                                                    style: Style {
+                                                        width: Val::Px(final_width),
+                                                        height: Val::Px(final_height),
+                                                        ..Default::default()
+                                                    },
+                                                    image: UiImage::new(
+                                                        participant.handle.clone().unwrap(),
+                                                    ),
+                                                    ..default()
+                                                },));
+                                            });
+                                    }
+                                }
+                            }
+                        }
+                    });
+            }
+        });
 }
 
 /// This function is the logic that occurs when the user clicks an image.
@@ -464,4 +450,22 @@ pub fn despawn_images_event_listener(
 // Bevy unfortunately has problems loading file paths with non-ASCII characters
 fn contains_non_ascii(path: &PathBuf) -> bool {
     path.to_string_lossy().chars().any(|c| !c.is_ascii())
+}
+
+fn calculate_number_of_images_for_match(
+    num_participants: usize,
+    speed_state: &Res<State<SpeedState>>,
+    mut number_of_participants_for_match: &mut ResMut<NumberOfParticipantsForMatch>,
+) {
+    match speed_state.get() {
+        SpeedState::Fast => match num_participants {
+            0..=400 => number_of_participants_for_match.0 = 2,
+            401..=1000 => number_of_participants_for_match.0 = 3,
+            1001..=2000 => number_of_participants_for_match.0 = 4,
+            2001..=4000 => number_of_participants_for_match.0 = 6,
+            4001..=6000 => number_of_participants_for_match.0 = 8,
+            _ => number_of_participants_for_match.0 = 12,
+        },
+        _ => number_of_participants_for_match.0 = 2,
+    }
 }

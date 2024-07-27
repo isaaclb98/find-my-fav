@@ -24,7 +24,7 @@ pub struct ParticipantsDequeIndices {
 }
 
 #[derive(Resource, Default, Debug)]
-pub struct NumberOfParticipantsForMatch(u32);
+pub struct NumberOfParticipantsForMatch(pub usize);
 
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 pub enum TournamentState {
@@ -45,6 +45,9 @@ pub struct LeftImageComponent;
 
 #[derive(Component)]
 pub struct RightImageComponent;
+
+#[derive(Component)]
+pub struct ImageClickedComponent;
 
 #[derive(Event)]
 pub struct TransitionToGeneratingEvent;
