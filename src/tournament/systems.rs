@@ -130,10 +130,10 @@ pub fn check_if_image_has_loaded(
     }
 }
 
-/// This function find the first two indices in the participants deque which have been successfully loaded.
+/// This function finds the first two indices in the participants deque which have been successfully loaded.
 pub fn find_first_two_loaded_indices(
     participants_deque_resource: Res<ParticipantsDeque>,
-    mut indices: ResMut<Indices>,
+    mut indices: ResMut<ParticipantsDequeIndices>,
     mut ev_displaying: EventWriter<TransitionToDisplayingEvent>,
 ) {
     let mut loaded_indices = Vec::new();
@@ -152,8 +152,8 @@ pub fn find_first_two_loaded_indices(
     }
 
     if loaded_indices.len() == 2 {
-        indices.index_1 = loaded_indices[0];
-        indices.index_2 = loaded_indices[1];
+        indices.indices.push(loaded_indices[0]);
+        indices.indices.push(loaded_indices[1]);
         ev_displaying.send(TransitionToDisplayingEvent);
     } else {
         println!("Less than two participants are loaded.");
@@ -168,7 +168,7 @@ pub fn display_two_loaded_images(
     both_image_components_query: Query<Entity, With<BothImageComponents>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
-    mut indices: ResMut<Indices>,
+    mut indices: ResMut<ParticipantsDequeIndices>,
 ) {
     // Despawn the preexisting images if they exist
     if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
@@ -180,10 +180,10 @@ pub fn display_two_loaded_images(
     if let (Some(participant_1), Some(participant_2)) = (
         participants_deque_resource
             .participants_deque
-            .get(indices.index_1),
+            .get(indices.indices[0]),
         participants_deque_resource
             .participants_deque
-            .get(indices.index_2),
+            .get(indices.indices[1]),
     ) {
         if let (Some(image_1), Some(image_2)) = (
             images.get(&participant_1.handle.clone().unwrap()),
@@ -288,17 +288,17 @@ pub fn display_two_loaded_images(
 pub fn image_clicked_decision_logic(
     mut ev_image_clicked: EventReader<ImageClickedEvent>,
     mut ev_resolving: EventWriter<TransitionToResolvingEvent>,
-    mut participants_deque_resource: ResMut<ParticipantsDeque>,
-    mut indices: ResMut<Indices>,
+    participants_deque_resource: Res<ParticipantsDeque>,
+    mut indices: ResMut<ParticipantsDequeIndices>,
 ) {
     for ev in ev_image_clicked.read() {
         if let (participant_1, participant_2) = (
             participants_deque_resource
                 .participants_deque
-                .get(indices.index_1),
+                .get(indices.indices[0]),
             participants_deque_resource
                 .participants_deque
-                .get(indices.index_2),
+                .get(indices.indices[1]),
         ) {
             let round_number = get_latest_round_number().expect("Failed to get round number");
 
@@ -329,14 +329,14 @@ pub fn resolve_deque(
     mut ev_generating: EventWriter<TransitionToGeneratingEvent>,
     mut ev_loading: EventWriter<TransitionToLoadingEvent>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
-    mut indices: ResMut<Indices>,
+    mut indices: ResMut<ParticipantsDequeIndices>,
 ) {
     participants_deque_resource
         .participants_deque
-        .remove(indices.index_2);
+        .remove(indices.indices[1]);
     participants_deque_resource
         .participants_deque
-        .remove(indices.index_1);
+        .remove(indices.indices[0]);
 
     let mut errored_ids = Vec::new();
 

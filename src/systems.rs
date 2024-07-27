@@ -16,7 +16,7 @@ pub fn spawn_camera(mut commands: Commands, window_query: Query<&Window, With<Pr
     });
 }
 
-pub fn show_app_state(app_state_res: Res<State<AppState>>) {
+pub fn _show_app_state(app_state_res: Res<State<AppState>>) {
     let state = app_state_res.get();
     println!("{:?}", state);
 }

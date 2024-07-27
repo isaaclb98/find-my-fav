@@ -12,8 +12,6 @@ pub fn interact_with_new_folder_button(
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<OpenCreatedFolderButton>),
     >,
-    mut app_state_next_state: ResMut<NextState<AppState>>,
-    mut image_folder_path_resource: ResMut<ImageFolderPath>,
     favourites_folder_resource: Res<FavouritesFolderResource>,
 ) {
     if let Ok((interaction, mut background_color)) = button_query.get_single_mut() {

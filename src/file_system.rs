@@ -53,18 +53,16 @@ pub fn copy_images_to_directory(
 
                 // make sure both file name and extension are valid
                 if let Some(file_name) = path.file_name() {
-                    if let Some(extension) = path.extension() {
-                        // create a new file name
-                        // append its percentile to one decimal as prefix
-                        // and use its original extension
-                        let new_file_name =
-                            format!("{:05.1}_{}", percentile, file_name.to_string_lossy());
+                    // create a new file name
+                    // append its percentile to one decimal as prefix
+                    // and use its original extension
+                    let new_file_name =
+                        format!("{:05.1}_{}", percentile, file_name.to_string_lossy());
 
-                        let destination_path = Path::new(new_directory).join(new_file_name);
+                    let destination_path = Path::new(new_directory).join(new_file_name);
 
-                        // copy the file
-                        fs::copy(image_path, destination_path)?;
-                    }
+                    // copy the file
+                    fs::copy(image_path, destination_path)?;
                 }
             }
             Ok(())

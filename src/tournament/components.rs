@@ -19,9 +19,8 @@ pub struct ParticipantsToLoadDeque {
 }
 
 #[derive(Resource, Default, Debug)]
-pub struct Indices {
-    pub index_1: usize,
-    pub index_2: usize,
+pub struct ParticipantsDequeIndices {
+    pub indices: Vec<usize>,
 }
 
 #[derive(Resource, Default, Debug)]
