@@ -12,12 +12,7 @@ use crate::styles::NODE_BUNDLE_EMPTY_ROW_STYLE;
 use crate::tournament::components::*;
 use crate::AppState;
 
-pub fn enter_into_tournament(mut ev_generating: EventWriter<TransitionToGeneratingEvent>) {
-    ev_generating.send(TransitionToGeneratingEvent);
-}
-
-// Will run in Generating
-/// Get the participants ids for a given round from the database
+/// This function gets the participants' ids for a given round from the database.
 pub fn get_participants_for_round(
     mut ev_loading: EventWriter<TransitionToLoadingEvent>,
     mut ev_finished: EventWriter<TransitionToFinishedEvent>,
@@ -60,7 +55,7 @@ pub fn get_participants_for_round(
     ev_loading.send(TransitionToLoadingEvent);
 }
 
-// Will run in Loading and Displaying and Deciding
+/// This function loads images one-at-a-time using Bevy's asset loader.
 pub fn load_images(
     asset_server: Res<AssetServer>,
     mut participants_to_load_resource: ResMut<ParticipantsToLoadDeque>,
@@ -88,6 +83,7 @@ pub fn load_images(
 
             let errored = contains_non_ascii(&image_path);
 
+            // Handle errors where the image path is incompatible with Bevy.
             if !errored {
                 image_handle = Some(asset_server.load(image_path));
             } else {
@@ -112,16 +108,16 @@ pub fn load_images(
     }
 }
 
-// run in Loading
-pub fn check_if_image_is_okay(
+/// This function checks to see if an image was loaded by Bevy yet. If it has failed to load (corrupt image file, etc.), it will be marked as 'errored' and will be cleaned up in the 'Resolving' state.
+pub fn check_if_image_has_loaded(
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
     asset_server: Res<AssetServer>,
 ) {
     for participant in &mut participants_deque_resource.participants_deque {
-        if let Some(image_handle_1) = participant.handle.clone() {
-            let load_state_1 = asset_server.get_load_state(&image_handle_1);
+        if let Some(image_handle) = participant.handle.clone() {
+            let load_state = asset_server.get_load_state(&image_handle);
 
-            match load_state_1 {
+            match load_state {
                 Some(LoadState::Loaded) => {
                     participant.loaded = true;
                 }
@@ -134,7 +130,7 @@ pub fn check_if_image_is_okay(
     }
 }
 
-// run in Loading
+/// This function find the first two indices in the participants deque which have been successfully loaded.
 pub fn find_first_two_loaded_indices(
     participants_deque_resource: Res<ParticipantsDeque>,
     mut indices: ResMut<Indices>,
@@ -164,7 +160,7 @@ pub fn find_first_two_loaded_indices(
     }
 }
 
-// Will run in Displaying
+/// This function displays two images for the user to choose between.
 pub fn display_two_loaded_images(
     mut commands: Commands,
     mut ev_deciding: EventWriter<TransitionToDecidingEvent>,
@@ -174,7 +170,7 @@ pub fn display_two_loaded_images(
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut indices: ResMut<Indices>,
 ) {
-    // despawn the preexisting images if they exist
+    // Despawn the preexisting images if they exist
     if let Ok(both_image_components_entity) = both_image_components_query.get_single() {
         commands
             .entity(both_image_components_entity)
@@ -288,13 +284,11 @@ pub fn display_two_loaded_images(
     }
 }
 
-// Will run in Deciding
-/// Logic to handle when the user clicks an image
+/// This function is the logic that occurs when the user clicks an image.
 pub fn image_clicked_decision_logic(
     mut ev_image_clicked: EventReader<ImageClickedEvent>,
     mut ev_resolving: EventWriter<TransitionToResolvingEvent>,
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
-
     mut indices: ResMut<Indices>,
 ) {
     for ev in ev_image_clicked.read() {
@@ -330,7 +324,7 @@ pub fn image_clicked_decision_logic(
     }
 }
 
-// run in Resolving
+/// This function works to resolve the state of the tournament. It removes errored participants, and checks if a new round is needed (less than two participants left in round).
 pub fn resolve_deque(
     mut ev_generating: EventWriter<TransitionToGeneratingEvent>,
     mut ev_loading: EventWriter<TransitionToLoadingEvent>,
@@ -346,7 +340,7 @@ pub fn resolve_deque(
 
     let mut errored_ids = Vec::new();
 
-    // collect IDs of participants where errored is true
+    // Collect IDs of participants where errored is true
     for participant in &participants_deque_resource.participants_deque {
         if participant.errored {
             errored_ids.push(participant.id);
@@ -358,7 +352,7 @@ pub fn resolve_deque(
         set_loser_out(id).expect("Failed to set loser out");
     }
 
-    // remove all errored
+    // Remove all errored participants
     participants_deque_resource
         .participants_deque
         .retain(|participant| !participant.errored);
@@ -388,6 +382,10 @@ pub fn resolve_deque(
 
 pub fn _display_current_tournament_state(tournament_state: Res<State<TournamentState>>) {
     print!("{:?} ", tournament_state);
+}
+
+pub fn enter_into_tournament(mut ev_generating: EventWriter<TransitionToGeneratingEvent>) {
+    ev_generating.send(TransitionToGeneratingEvent);
 }
 
 pub fn transition_to_generating_event_listener(
@@ -463,6 +461,7 @@ pub fn despawn_images_event_listener(
     }
 }
 
+// Bevy unfortunately has problems loading file paths with non-ASCII characters
 fn contains_non_ascii(path: &PathBuf) -> bool {
     path.to_string_lossy().chars().any(|c| !c.is_ascii())
 }

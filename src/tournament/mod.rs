@@ -37,7 +37,7 @@ impl Plugin for TournamentPlugin {
             .add_systems(
                 Update,
                 (
-                    check_if_image_is_okay,
+                    check_if_image_has_loaded,
                     find_first_two_loaded_indices,
                     load_images,
                 )

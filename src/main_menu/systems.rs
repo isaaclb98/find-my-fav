@@ -10,10 +10,6 @@ pub enum ResumedState {
     Resumed,
 }
 
-// get highest rated image
-// get path from images
-// set resource
-
 pub fn initialize_database_if_image_folder_path(image_folder_path: Res<ImageFolderPath>) {
     if let Some(path) = &image_folder_path.image_folder_path {
         initialize_database(path.clone())

@@ -169,17 +169,6 @@ pub(crate) fn get_image_path_from_database(id: u64) -> Result<PathBuf> {
     Ok(PathBuf::from(path))
 }
 
-pub(crate) fn _get_tournament_finished(conn: &Connection, round_number: u64) -> Result<bool> {
-    conn.query_row(
-        "SELECT tournament_finished FROM rounds WHERE round_number = ?1",
-        params![round_number],
-        |row| {
-            let finished: i32 = row.get(0)?;
-            Ok(finished != 0)
-        },
-    )
-}
-
 pub(crate) fn set_loser_out(image_id: u64) -> Result<()> {
     let db_path = get_database_path().expect("Error getting database path.");
     let conn = Connection::open(db_path).expect("Error opening connection");
