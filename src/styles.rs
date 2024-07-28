@@ -12,6 +12,7 @@ pub const BUTTON_STYLE: Style = {
     style.align_items = AlignItems::Center;
     style.width = Val::Px(400.0);
     style.height = Val::Px(60.0);
+    style.border = UiRect::all(Val::Px(2.0));
 
     style
 };

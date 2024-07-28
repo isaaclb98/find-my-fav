@@ -96,7 +96,8 @@ pub fn build_speed_select(
                                     border_color: NORMAL_BUTTON_COLOR.into(),
                                     ..default()
                                 },
-                                SlowButton {},
+                                // slow button
+                                SpeedSelectButton::SlowButton,
                             ))
                             .with_children(|parent| {
                                 parent.spawn(TextBundle {
@@ -121,7 +122,7 @@ pub fn build_speed_select(
                                     border_color: NORMAL_BUTTON_COLOR.into(),
                                     ..default()
                                 },
-                                NormalButton {},
+                                SpeedSelectButton::NormalButton,
                             ))
                             .with_children(|parent| {
                                 parent.spawn(TextBundle {
@@ -146,7 +147,7 @@ pub fn build_speed_select(
                                     border_color: NORMAL_BUTTON_COLOR.into(),
                                     ..default()
                                 },
-                                FastButton {},
+                                SpeedSelectButton::FastButton,
                             ))
                             .with_children(|parent| {
                                 parent.spawn(TextBundle {

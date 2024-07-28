@@ -7,6 +7,13 @@ pub struct SpeedSelectComponent;
 pub struct BeginButton;
 
 #[derive(Component)]
+pub enum SpeedSelectButton {
+    SlowButton,
+    NormalButton,
+    FastButton,
+}
+
+#[derive(Component)]
 pub struct SlowButton;
 
 #[derive(Component)]

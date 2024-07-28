@@ -1,34 +1,25 @@
-use crate::tournament::components::{ImageClickedEvent, LeftImageComponent, RightImageComponent};
+use crate::tournament::components::{ImageClickedEvent, ImageComponent};
 use bevy::prelude::*;
 
-pub fn interact_with_left_image_button(
-    mut button_query: Query<&Interaction, (Changed<Interaction>, With<LeftImageComponent>)>,
+pub fn interact_with_image_button(
+    mut button_query: Query<
+        (&Interaction, &ImageComponent, Entity),
+        (Changed<Interaction>, With<ImageComponent>),
+    >,
     mut image_clicked_event: EventWriter<ImageClickedEvent>,
 ) {
-    if let Ok(interaction) = button_query.get_single_mut() {
+    if let Ok((interaction, image_component, entity)) = button_query.get_single_mut() {
         match *interaction {
             Interaction::Pressed => {
-                image_clicked_event.send(ImageClickedEvent { left_image: true });
-                println!("Left image clicked.");
+                println!(
+                    "{:?} clicked. ImageComponent: {:?}",
+                    entity, image_component
+                );
+                image_clicked_event.send(ImageClickedEvent {
+                    id: image_component.id,
+                });
             }
-            Interaction::Hovered => {}
-            Interaction::None => {}
-        }
-    }
-}
-
-pub fn interact_with_right_image_button(
-    mut button_query: Query<&Interaction, (Changed<Interaction>, With<RightImageComponent>)>,
-    mut image_clicked_event: EventWriter<ImageClickedEvent>,
-) {
-    if let Ok(interaction) = button_query.get_single_mut() {
-        match *interaction {
-            Interaction::Pressed => {
-                image_clicked_event.send(ImageClickedEvent { left_image: false });
-                println!("Right image clicked.");
-            }
-            Interaction::Hovered => {}
-            Interaction::None => {}
+            _ => {}
         }
     }
 }

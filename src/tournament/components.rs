@@ -40,14 +40,11 @@ pub enum TournamentState {
 #[derive(Component)]
 pub struct BothImageComponents;
 
-#[derive(Component)]
-pub struct LeftImageComponent;
-
-#[derive(Component)]
-pub struct RightImageComponent;
-
-#[derive(Component)]
-pub struct ImageClickedComponent;
+#[derive(Component, Debug)]
+pub struct ImageComponent {
+    pub index: usize,
+    pub id: u64,
+}
 
 #[derive(Event)]
 pub struct TransitionToGeneratingEvent;
@@ -72,5 +69,5 @@ pub struct DespawnImagesEvent;
 
 #[derive(Event)]
 pub struct ImageClickedEvent {
-    pub left_image: bool,
+    pub id: u64,
 }

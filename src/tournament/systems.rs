@@ -249,17 +249,23 @@ pub fn display_two_loaded_images(
                                             })
                                             .with_children(|parent| {
                                                 // Image
-                                                parent.spawn((ButtonBundle {
-                                                    style: Style {
-                                                        width: Val::Px(final_width),
-                                                        height: Val::Px(final_height),
-                                                        ..Default::default()
+                                                parent.spawn((
+                                                    ButtonBundle {
+                                                        style: Style {
+                                                            width: Val::Px(final_width),
+                                                            height: Val::Px(final_height),
+                                                            ..Default::default()
+                                                        },
+                                                        image: UiImage::new(
+                                                            participant.handle.clone().unwrap(),
+                                                        ),
+                                                        ..default()
                                                     },
-                                                    image: UiImage::new(
-                                                        participant.handle.clone().unwrap(),
-                                                    ),
-                                                    ..default()
-                                                },));
+                                                    ImageComponent {
+                                                        index: indices.indices[idx],
+                                                        id: participant.id,
+                                                    },
+                                                ));
                                             });
                                     }
                                 }
@@ -268,45 +274,38 @@ pub fn display_two_loaded_images(
                     });
             }
         });
+
+    ev_deciding.send(TransitionToDecidingEvent);
 }
 
 /// This function is the logic that occurs when the user clicks an image.
 pub fn image_clicked_decision_logic(
     mut ev_image_clicked: EventReader<ImageClickedEvent>,
     mut ev_resolving: EventWriter<TransitionToResolvingEvent>,
-    participants_deque_resource: Res<ParticipantsDeque>,
+    mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut indices: ResMut<ParticipantsDequeIndices>,
+    number_of_participants_for_match: Res<NumberOfParticipantsForMatch>,
 ) {
     for ev in ev_image_clicked.read() {
-        if let (participant_1, participant_2) = (
-            participants_deque_resource
-                .participants_deque
-                .get(indices.indices[0]),
-            participants_deque_resource
-                .participants_deque
-                .get(indices.indices[1]),
-        ) {
-            let round_number = get_latest_round_number().expect("Failed to get round number");
+        let id = ev.id;
 
-            if let (image_id_1, image_id_2) = (participant_1.unwrap().id, participant_2.unwrap().id)
-            {
-                if ev.left_image {
-                    set_loser_out(image_id_2).expect("Failed to set loser");
-                    increment_rating(image_id_1).expect("Failed to increment rating");
-                    insert_match_into_database(round_number, image_id_1, image_id_2, image_id_1)
-                        .expect("Failed to insert match");
-                    println!("Set winner to left.");
-                } else {
-                    set_loser_out(image_id_1).expect("Failed to set loser");
-                    increment_rating(image_id_2).expect("Failed to increment rating");
-                    insert_match_into_database(round_number, image_id_2, image_id_1, image_id_2)
-                        .expect("Failed to insert match");
-                    println!("Set winner to right.");
-                }
+        let round_number = get_latest_round_number().expect("Failed to get round number");
 
-                ev_resolving.send(TransitionToResolvingEvent);
+        for _ in 0..number_of_participants_for_match.0 {
+            let loser_id = participants_deque_resource
+                .participants_deque
+                .pop_front()
+                .unwrap()
+                .id;
+            if loser_id != id {
+                set_loser_out(loser_id).expect("Failed to set loser");
+                increment_rating(id).expect("Failed to increment rating");
+                insert_match_into_database(round_number, id, loser_id, id)
+                    .expect("Failed to insert match");
             }
         }
+
+        ev_resolving.send(TransitionToResolvingEvent);
     }
 }
 
@@ -317,12 +316,7 @@ pub fn resolve_deque(
     mut participants_deque_resource: ResMut<ParticipantsDeque>,
     mut indices: ResMut<ParticipantsDequeIndices>,
 ) {
-    participants_deque_resource
-        .participants_deque
-        .remove(indices.indices[1]);
-    participants_deque_resource
-        .participants_deque
-        .remove(indices.indices[0]);
+    indices.indices.clear();
 
     let mut errored_ids = Vec::new();
 
@@ -459,12 +453,14 @@ fn calculate_number_of_images_for_match(
 ) {
     match speed_state.get() {
         SpeedState::Fast => match num_participants {
-            0..=400 => number_of_participants_for_match.0 = 2,
-            401..=1000 => number_of_participants_for_match.0 = 3,
-            1001..=2000 => number_of_participants_for_match.0 = 4,
-            2001..=4000 => number_of_participants_for_match.0 = 6,
-            4001..=6000 => number_of_participants_for_match.0 = 8,
-            _ => number_of_participants_for_match.0 = 12,
+            0..=100 => number_of_participants_for_match.0 = 2,
+            100..=250 => number_of_participants_for_match.0 = 3,
+            251..=500 => number_of_participants_for_match.0 = 4,
+            501..=1000 => number_of_participants_for_match.0 = 6,
+            1001..=2000 => number_of_participants_for_match.0 = 8,
+            2001..=4000 => number_of_participants_for_match.0 = 10,
+            4001..=6000 => number_of_participants_for_match.0 = 12,
+            _ => number_of_participants_for_match.0 = 16,
         },
         _ => number_of_participants_for_match.0 = 2,
     }

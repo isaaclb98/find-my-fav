@@ -53,11 +53,7 @@ impl Plugin for TournamentPlugin {
             )
             .add_systems(
                 Update,
-                (
-                    interact_with_left_image_button,
-                    interact_with_right_image_button,
-                    image_clicked_decision_logic,
-                )
+                (interact_with_image_button, image_clicked_decision_logic)
                     .run_if(in_state(AppState::Tournament))
                     .run_if(in_state(TournamentState::Deciding)),
             )

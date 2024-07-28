@@ -19,9 +19,8 @@ impl Plugin for SpeedSelectPlugin {
                 Update,
                 (
                     interact_with_begin_button,
-                    interact_with_slow_button,
-                    interact_with_normal_button,
-                    interact_with_fast_button,
+                    interact_with_speed_select_buttons,
+                    colour_the_border_if_selected,
                 )
                     .run_if(in_state(AppState::SpeedSelect)),
             )
